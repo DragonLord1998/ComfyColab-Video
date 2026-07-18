@@ -95,6 +95,18 @@ class PackManifestTests(unittest.TestCase):
             [item["id"] for item in dependencies],
             ["comfyui-gguf", "comfyui-ltxvideo"],
         )
+        expected_sources = {
+            "comfyui-gguf": {
+                "repository": "https://github.com/city96/ComfyUI-GGUF.git",
+                "ref": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a",
+                "requirements_file": "requirements.txt",
+            },
+            "comfyui-ltxvideo": {
+                "repository": "https://github.com/Lightricks/ComfyUI-LTXVideo.git",
+                "ref": "aceeae9635f6d493f2893ba3c411a1c36031788a",
+                "requirements_file": "requirements.txt",
+            },
+        }
         for dependency in dependencies:
             self.assertEqual(dependency["kind"], "git")
             self.assertEqual(dependency["scope"], "comfyui")
@@ -102,6 +114,13 @@ class PackManifestTests(unittest.TestCase):
             self.assertTrue(dependency["repository"].endswith(".git"))
             self.assertRegex(dependency["ref"], IMMUTABLE_REF)
             self.assertTrue(safe_relative_path(dependency["destination"]))
+            self.assertEqual(
+                {
+                    key: dependency[key]
+                    for key in expected_sources[dependency["id"]]
+                },
+                expected_sources[dependency["id"]],
+            )
 
         self.assertEqual(
             self.manifest["health_checks"]["node_ids"],

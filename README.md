@@ -6,12 +6,12 @@ preserves the existing `custom_nodes/ComfyColab-LTXVideo` node root and the
 public `ComfyColabLTX23Video` facade.
 
 > Development staging status: the source, manifest, hooks, workflow, and
-> offline contract suite are complete, but the v1 manifest does not yet contain
-> normalized main-environment Python requirements from the pinned
-> ComfyUI-GGUF and ComfyUI-LTXVideo checkouts. Core correctly refuses to
-> auto-discover undeclared `requirements.txt` files. Add the resolved
-> requirements to `environments` before publishing a runtime-installable
-> release.
+> offline contract suite are complete. The v1 manifest explicitly directs the
+> generic core runtime to install each dependency's `requirements.txt` from the
+> pinned ComfyUI-GGUF and ComfyUI-LTXVideo checkouts. A runtime-installable
+> release still requires an immutable daughter commit in the official core
+> registry, an exact generated lock, and a clean live Colab install, startup,
+> and inference run against that lock.
 
 The facade supports text-to-video and optional first-frame image conditioning,
 selectable LTX-2.3 Distilled 1.1 GGUF variants, native synchronized audio,
@@ -20,8 +20,8 @@ native ComfyUI `VIDEO`, decoded `IMAGE` frames, and `AUDIO`.
 
 ## Installation after publication
 
-After normalized upstream requirements are declared and an immutable daughter
-commit is added to the official core registry, use:
+After an immutable daughter commit is added to the official core registry and
+the resulting lock passes live validation, use:
 
 ```bash
 comfycolab start --pack video

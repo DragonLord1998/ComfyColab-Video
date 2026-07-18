@@ -8,11 +8,14 @@ otherwise.
 
 ## Unreleased
 
+### Changed
+
+- Declared each pinned Git dependency's own `requirements.txt` for
+  dependency-owned installation by the generic core runtime.
+
 ### Required before the first runtime-installable release
 
-- Resolve Python requirements from the pinned ComfyUI-GGUF and
-  ComfyUI-LTXVideo checkouts into the manifest's main `environments`
-  declaration.
+- Publish an immutable daughter commit and add it to the official core registry.
 - Generate an exact ComfyColab lock and complete a live Colab smoke run against
   that lock.
 - Record accelerator, peak-memory, runtime, audiovisual synchronization, and
@@ -32,10 +35,5 @@ otherwise.
 
 ### Known limitations
 
-- The pack manifest does not yet declare normalized main-environment Python
-  requirements from the pinned ComfyUI-GGUF and ComfyUI-LTXVideo checkouts.
-  ComfyColab must not infer or install undeclared upstream `requirements.txt`
-  files; this development version is therefore not a runtime-installable
-  release.
 - Local validation does not prove Colab memory fit, runtime, audiovisual
   synchronization, or output quality.

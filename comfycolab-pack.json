@@ -27,7 +27,8 @@
       "repository": "https://github.com/city96/ComfyUI-GGUF.git",
       "ref": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a",
       "destination": "custom_nodes/ComfyUI-GGUF",
-      "scope": "comfyui"
+      "scope": "comfyui",
+      "requirements_file": "requirements.txt"
     },
     {
       "kind": "git",
@@ -35,7 +36,8 @@
       "repository": "https://github.com/Lightricks/ComfyUI-LTXVideo.git",
       "ref": "aceeae9635f6d493f2893ba3c411a1c36031788a",
       "destination": "custom_nodes/ComfyUI-LTXVideo",
-      "scope": "comfyui"
+      "scope": "comfyui",
+      "requirements_file": "requirements.txt"
     }
   ],
   "patches": [],
