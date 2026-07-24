@@ -33,6 +33,20 @@ def _run(*argv: str, cwd: Path | None = None) -> None:
     )
 
 
+def _install_self_requirements() -> None:
+    requirements = ROOT / "requirements.txt"
+    if requirements.is_file():
+        _run(
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "-r",
+            str(requirements),
+        )
+
+
 def _custom_nodes_root() -> Path:
     parent = ROOT.parent
     if parent.name != "custom_nodes":
@@ -123,6 +137,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if not args.check:
+        _install_self_requirements()
         installed = {
             name: _install_dependency(name, repository, revision)
             for name, repository, revision in DEPENDENCIES

@@ -57,6 +57,12 @@ revisions, byte sizes, and SHA-256 values for selected GGUFs, the Gemma text
 encoder, connector, video/audio VAEs, and spatial/temporal upscalers. Only
 assets required by the visible node settings are downloaded.
 
+Model downloads use authenticated Hugging Face Hub with `hf-xet` as the primary
+transport and enable `HF_XET_HIGH_PERFORMANCE=1` automatically. Public models
+still work anonymously when no `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN` is set.
+If Hub/Xet is unavailable or fails, the pack falls back to its checksum-verified
+`urllib` downloader with resumable `.part` files.
+
 ## Validation
 
 ```bash

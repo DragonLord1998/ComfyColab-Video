@@ -6,7 +6,9 @@ import os
 import shutil
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -22,6 +24,13 @@ _VERIFIED_FILES: set[tuple[str, int, int, str]] = set()
 
 class DownloadError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class _HuggingFaceFile:
+    repo_id: str
+    revision: str
+    filename: str
 
 
 def sha256_file(path: Path) -> str:
@@ -77,37 +86,102 @@ def _request(url: str, offset: int, *, include_auth: bool) -> urllib.request.Req
     return urllib.request.Request(url, headers=headers)
 
 
-def download_file(
+def _hf_token() -> str | None:
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+
+
+def _parse_huggingface_url(url: str) -> _HuggingFaceFile | None:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or parsed.netloc != "huggingface.co":
+        return None
+    parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
+    if len(parts) < 5 or parts[2] != "resolve":
+        return None
+    revision = parts[3]
+    filename = "/".join(parts[4:])
+    if not revision or not filename:
+        return None
+    return _HuggingFaceFile(
+        repo_id="/".join(parts[:2]),
+        revision=revision,
+        filename=filename,
+    )
+
+
+def _download_with_huggingface_hub(
     *,
     url: str,
     destination: Path,
     expected_sha256: str,
     expected_size: int,
-    force: bool = False,
     progress: ProgressCallback | None = None,
-    attempts: int = DEFAULT_ATTEMPTS,
 ) -> Path:
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    marker = destination.with_suffix(destination.suffix + ".sha256")
-    partial = destination.with_suffix(destination.suffix + ".part")
+    reference = _parse_huggingface_url(url)
+    if reference is None:
+        raise DownloadError(f"{destination.name} is not a Hugging Face resolve URL.")
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as error:
+        raise DownloadError(
+            "huggingface_hub with hf-xet is not installed."
+        ) from error
 
-    if force:
-        _forget_verified(destination)
-        destination.unlink(missing_ok=True)
-        marker.unlink(missing_ok=True)
-        partial.unlink(missing_ok=True)
-    elif _verified(destination, expected_sha256, expected_size):
-        return destination
-    elif destination.exists():
-        _forget_verified(destination)
-        destination.unlink()
-        marker.unlink(missing_ok=True)
-
-    include_auth = bool(
-        os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    token = _hf_token()
+    candidates: tuple[str | bool | None, ...] = (
+        (token, False) if token else (False,)
     )
+    staging = destination.parent / f".{destination.name}.hf-xet"
+    last_error: Exception | None = None
+    for candidate in candidates:
+        staging.mkdir(parents=True, exist_ok=True)
+        try:
+            downloaded = Path(
+                hf_hub_download(
+                    repo_id=reference.repo_id,
+                    filename=reference.filename,
+                    revision=reference.revision,
+                    token=candidate,
+                    local_dir=str(staging),
+                )
+            )
+            if downloaded.stat().st_size != expected_size:
+                raise DownloadError(
+                    f"Wrong byte count for {destination.name}: expected "
+                    f"{expected_size}, received {downloaded.stat().st_size}."
+                )
+            actual_sha256 = sha256_file(downloaded)
+            if actual_sha256 != expected_sha256:
+                raise DownloadError(
+                    f"Checksum mismatch for {destination.name}: expected "
+                    f"{expected_sha256}, received {actual_sha256}."
+                )
+            if progress:
+                progress(expected_size, expected_size)
+            os.replace(downloaded, destination)
+            _record_verified(destination, expected_sha256, expected_size)
+            shutil.rmtree(staging, ignore_errors=True)
+            return destination
+        except Exception as error:
+            last_error = error
+            shutil.rmtree(staging, ignore_errors=True)
+    raise DownloadError(
+        f"Hugging Face Hub/Xet failed for {destination.name}: {last_error}"
+    ) from last_error
+
+
+def _download_with_urllib(
+    *,
+    url: str,
+    destination: Path,
+    expected_sha256: str,
+    expected_size: int,
+    progress: ProgressCallback | None,
+    attempts: int,
+) -> Path:
+    partial = destination.with_suffix(destination.suffix + ".part")
+    include_auth = bool(_hf_token())
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         offset = partial.stat().st_size if partial.exists() else 0
@@ -206,3 +280,57 @@ def download_file(
         f"Unable to download {destination.name} after {attempts} attempts: "
         f"{last_error}.{partial_note}"
     )
+
+
+def download_file(
+    *,
+    url: str,
+    destination: Path,
+    expected_sha256: str,
+    expected_size: int,
+    force: bool = False,
+    progress: ProgressCallback | None = None,
+    attempts: int = DEFAULT_ATTEMPTS,
+) -> Path:
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    marker = destination.with_suffix(destination.suffix + ".sha256")
+    partial = destination.with_suffix(destination.suffix + ".part")
+
+    if force:
+        _forget_verified(destination)
+        destination.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
+        partial.unlink(missing_ok=True)
+    elif _verified(destination, expected_sha256, expected_size):
+        return destination
+    elif destination.exists():
+        _forget_verified(destination)
+        destination.unlink()
+        marker.unlink(missing_ok=True)
+
+    try:
+        return _download_with_huggingface_hub(
+            url=url,
+            destination=destination,
+            expected_sha256=expected_sha256,
+            expected_size=expected_size,
+            progress=progress,
+        )
+    except (OSError, DownloadError) as hub_error:
+        try:
+            return _download_with_urllib(
+                url=url,
+                destination=destination,
+                expected_sha256=expected_sha256,
+                expected_size=expected_size,
+                progress=progress,
+                attempts=attempts,
+            )
+        except DownloadError as urllib_error:
+            raise DownloadError(
+                f"Unable to download {destination.name} with Hugging Face Hub/Xet "
+                f"or urllib fallback. Hub/Xet error: {hub_error}. "
+                f"urllib error: {urllib_error}"
+            ) from urllib_error
