@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "video",
-  "version": "0.1.0-dev1",
+  "version": "0.2.0-dev1",
   "display_name": "ComfyColab Video",
   "compatibility": {
     "core_manifest_api": 1,

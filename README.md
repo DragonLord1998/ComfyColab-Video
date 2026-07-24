@@ -1,24 +1,33 @@
 # ComfyColab Video
 
-ComfyColab Video is the optional video-generation pack for
-[ComfyColab](https://github.com/DragonLord1998/ComfyColab). Its first release
-preserves the existing `custom_nodes/ComfyColab-LTXVideo` node root and the
-public `ComfyColabLTX23Video` facade.
-
-> Development staging status: the source, manifest, hooks, workflow, and
-> offline contract suite are complete. The v1 manifest explicitly directs the
-> generic core runtime to install each dependency's `requirements.txt` from the
-> pinned ComfyUI-GGUF and ComfyUI-LTXVideo checkouts. A runtime-installable
-> release still requires an immutable daughter commit in the official core
-> registry, an exact generated lock, and a clean live Colab install, startup,
-> and inference run against that lock.
+ComfyColab Video is a standalone ComfyUI custom node for LTX-2.3 text-to-video
+and image-to-video generation. It also remains compatible with the managed
+[ComfyColab](https://github.com/DragonLord1998/ComfyColab) pack runtime.
 
 The facade supports text-to-video and optional first-frame image conditioning,
 selectable LTX-2.3 Distilled 1.1 GGUF variants, native synchronized audio,
 24/48 FPS output, and optional 1.5x or 2x latent spatial upscaling. It returns
 native ComfyUI `VIDEO`, decoded `IMAGE` frames, and `AUDIO`.
 
-## Installation after publication
+## Standalone installation
+
+Install the Git repository through ComfyUI Manager, or install manually:
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/DragonLord1998/ComfyColab-Video.git
+cd ComfyColab-Video
+python install.py
+```
+
+Use the Python executable that starts ComfyUI, then restart ComfyUI. The
+installer adds exact pinned sibling checkouts of ComfyUI-GGUF and the official
+Lighttricks ComfyUI-LTXVideo extension only when they are absent. Existing
+exact-pinned checkouts are reused; different or non-git installations produce
+an actionable error and are never overwritten. Model weights remain lazy,
+checksum-verified downloads.
+
+## Managed ComfyColab installation
 
 After an immutable daughter commit is added to the official core registry and
 the resulting lock passes live validation, use:
@@ -32,8 +41,8 @@ official Lighttricks ComfyUI-LTXVideo extension. When Image and Video are
 selected together, the resolver can deduplicate their identical GGUF
 dependency rather than installing it twice.
 
-During development, core integration uses an explicit authenticated
-`--pack-ref` file rather than the currently unpublished `video` alias.
+The managed resolver deduplicates ComfyUI-GGUF when Image and Video are enabled
+together.
 
 ## Workflow
 

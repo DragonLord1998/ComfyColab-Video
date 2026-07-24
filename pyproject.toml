@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfycolab-video-pack"
-version = "0.1.0-dev1"
-description = "Optional LTX video generation nodes and workflows for ComfyColab."
+version = "0.2.0-dev1"
+description = "Standalone ComfyUI LTX-2.3 text and image to video generation."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -13,6 +13,16 @@ authors = [
   { name = "ComfyColab contributors" },
 ]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/DragonLord1998/ComfyColab-Video"
+Documentation = "https://github.com/DragonLord1998/ComfyColab-Video#readme"
+"Bug Tracker" = "https://github.com/DragonLord1998/ComfyColab-Video/issues"
+
+[tool.comfy]
+PublisherId = "dragonlord1998"
+DisplayName = "ComfyColab Video"
+requires-comfyui = ">=0.28.0"
 
 [tool.setuptools]
 packages = []

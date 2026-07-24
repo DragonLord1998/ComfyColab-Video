@@ -15,6 +15,9 @@ def main() -> int:
     node_root = root / "custom_nodes" / "ComfyColab-LTXVideo"
     node_source = (node_root / "nodes.py").read_text(encoding="utf-8")
     checks = {
+        "standalone_entrypoint": (root / "__init__.py").is_file(),
+        "standalone_installer": (root / "install.py").is_file(),
+        "standalone_node_list": (root / "node_list.json").is_file(),
         "node_root": node_root.is_dir(),
         "public_node_id": PUBLIC_NODE_ID in node_source,
         "catalog": (node_root / "catalog" / "ltx_2_3.json").is_file(),
