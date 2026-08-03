@@ -51,7 +51,7 @@ class PackManifestTests(unittest.TestCase):
         self.assertEqual(set(self.manifest), EXPECTED_TOP_LEVEL)
         self.assertEqual(self.manifest["schema"], 1)
         self.assertEqual(self.manifest["id"], "video")
-        self.assertEqual(self.manifest["version"], "0.1.0-dev1")
+        self.assertEqual(self.manifest["version"], "0.3.0-dev1")
         self.assertEqual(
             self.manifest["compatibility"]["core_manifest_api"],
             1,

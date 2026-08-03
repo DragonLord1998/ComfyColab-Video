@@ -1,19 +1,9 @@
 # ComfyColab Video
 
-ComfyColab Video is the optional video-generation pack for
-[ComfyColab](https://github.com/DragonLord1998/ComfyColab). Its first release
-preserves the existing `custom_nodes/ComfyColab-LTXVideo` node root and the
-public `ComfyColabLTX23Video` facade. It also stages MiniMax H3 Base loader
-and generation facades for text/image-to-audio-video and reference-to-audio-video
-workflows.
-
-> Development staging status: the source, manifest, hooks, workflow, and
-> offline contract suite are complete. The v1 manifest explicitly directs the
-> generic core runtime to install each dependency's `requirements.txt` from the
-> pinned ComfyUI-GGUF and ComfyUI-LTXVideo checkouts. A runtime-installable
-> release still requires an immutable daughter commit in the official core
-> registry, an exact generated lock, and a clean live Colab install, startup,
-> and inference run against that lock.
+ComfyColab Video is a standalone ComfyUI custom node for LTX-2.3 text-to-video
+and image-to-video generation plus MiniMax H3 text/image-to-audio-video and
+reference-to-audio-video generation. It also remains compatible with the managed
+[ComfyColab](https://github.com/DragonLord1998/ComfyColab) pack runtime.
 
 The facade supports text-to-video and optional first-frame image conditioning,
 selectable LTX-2.3 Distilled 1.1 GGUF variants, native synchronized audio,
@@ -36,10 +26,27 @@ local Base path is 768p-class and capped at `768 x 1344` pixels of area; this
 pack does not claim local 2K regeneration, hosted Context-IR, sparse attention,
 unrestricted geography, or OSI-open-source weights.
 
-## Installation after publication
+## Standalone installation
 
-After an immutable daughter commit is added to the official core registry and
-the resulting lock passes live validation, use:
+Install the Git repository through ComfyUI Manager, or install manually:
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/DragonLord1998/ComfyColab-Video.git
+cd ComfyColab-Video
+python install.py
+```
+
+Use the Python executable that starts ComfyUI, then restart ComfyUI. The
+installer adds exact pinned sibling checkouts of ComfyUI-GGUF and the official
+Lighttricks ComfyUI-LTXVideo extension only when they are absent. Existing
+exact-pinned checkouts are reused; different or non-git installations produce
+an actionable error and are never overwritten. Model weights remain lazy,
+checksum-verified downloads.
+
+## Managed ComfyColab installation
+
+After the immutable daughter commit is added to the official core registry, use:
 
 ```bash
 comfycolab start --pack video
@@ -50,8 +57,8 @@ official Lighttricks ComfyUI-LTXVideo extension. When Image and Video are
 selected together, the resolver can deduplicate their identical GGUF
 dependency rather than installing it twice.
 
-During development, core integration uses an explicit authenticated
-`--pack-ref` file rather than the currently unpublished `video` alias.
+The managed resolver deduplicates ComfyUI-GGUF when Image and Video are enabled
+together.
 
 ## Workflow
 
@@ -103,6 +110,12 @@ must be 2-15 seconds, total reference-video duration is capped at 15 seconds,
 total reference-audio duration is capped at 15 seconds, and the combined count
 of image, video, paired-audio, and standalone-audio reference files is capped
 at 12.
+
+Model downloads use authenticated Hugging Face Hub with `hf-xet` as the primary
+transport and enable `HF_XET_HIGH_PERFORMANCE=1` automatically. Public models
+still work anonymously when no `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN` is set.
+If Hub/Xet is unavailable or fails, the pack falls back to its checksum-verified
+`urllib` downloader with resumable `.part` files.
 
 ## Validation
 

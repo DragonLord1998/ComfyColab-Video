@@ -48,9 +48,11 @@ def _require_upstream_nodes(node_ids: set[str]) -> None:
     missing = sorted(node_ids - set(registry))
     if missing:
         raise RuntimeError(
-            "ComfyColab LTX-2.3 requires the pinned ComfyUI, ComfyUI-GGUF, and "
-            "Lighttricks ComfyUI-LTXVideo node packs. Missing node IDs: "
-            f"{', '.join(missing)}. Restart with `comfycolab start --refresh`."
+            "ComfyColab LTX-2.3 requires current ComfyUI plus ComfyUI-GGUF and "
+            "Lighttricks ComfyUI-LTXVideo. Missing node IDs: "
+            f"{', '.join(missing)}. Run this repository's `install.py`, update "
+            "ComfyUI, and restart. Managed ComfyColab users can instead run "
+            "`comfycolab start --refresh`."
         )
 
 

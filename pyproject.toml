@@ -4,15 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfycolab-video-pack"
-version = "0.1.0-dev1"
-description = "Optional LTX and MiniMax H3 video generation nodes and workflows for ComfyColab."
+version = "0.3.0-dev1"
+description = "Standalone ComfyUI LTX-2.3 and MiniMax H3 video generation."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "ComfyColab contributors" },
 ]
-dependencies = []
+dependencies = [
+  "huggingface_hub[hf_xet]>=0.36.0,<2",
+]
+
+[project.urls]
+Repository = "https://github.com/DragonLord1998/ComfyColab-Video"
+Documentation = "https://github.com/DragonLord1998/ComfyColab-Video#readme"
+"Bug Tracker" = "https://github.com/DragonLord1998/ComfyColab-Video/issues"
+
+[tool.comfy]
+PublisherId = "dragonlord1998"
+DisplayName = "ComfyColab Video"
+requires-comfyui = ">=0.28.0"
 
 [tool.setuptools]
 packages = []
