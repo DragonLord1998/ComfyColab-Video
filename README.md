@@ -3,7 +3,9 @@
 ComfyColab Video is the optional video-generation pack for
 [ComfyColab](https://github.com/DragonLord1998/ComfyColab). Its first release
 preserves the existing `custom_nodes/ComfyColab-LTXVideo` node root and the
-public `ComfyColabLTX23Video` facade.
+public `ComfyColabLTX23Video` facade. It also stages MiniMax H3 Base loader
+and generation facades for text/image-to-audio-video and reference-to-audio-video
+workflows.
 
 > Development staging status: the source, manifest, hooks, workflow, and
 > offline contract suite are complete. The v1 manifest explicitly directs the
@@ -17,6 +19,22 @@ The facade supports text-to-video and optional first-frame image conditioning,
 selectable LTX-2.3 Distilled 1.1 GGUF variants, native synchronized audio,
 24/48 FPS output, and optional 1.5x or 2x latent spatial upscaling. It returns
 native ComfyUI `VIDEO`, decoded `IMAGE` frames, and `AUDIO`.
+
+The MiniMax H3 facades expose:
+
+- `MiniMax H3 Bundle Loader`, which downloads one optimized FL2VA or Ref2VA
+  transformer plus the three shared H3 components and returns one typed
+  `MINIMAX_H3_BUNDLE` cable plus raw `MODEL`, `CLIP`, `VAE`, and `VAE` outputs.
+- `ComfyColab MiniMax H3 - Text/Image to Video`, which accepts an FL2VA bundle,
+  a prompt, and optional first/last frames.
+- `ComfyColab MiniMax H3 - Reference to Video`, which accepts a Ref2VA bundle
+  and ordered reference images, videos, paired video soundtracks, and standalone
+  audio.
+
+H3 output is 24 FPS video with native synchronized 32 kHz stereo audio. The
+local Base path is 768p-class and capped at `768 x 1344` pixels of area; this
+pack does not claim local 2K regeneration, hosted Context-IR, sparse attention,
+unrestricted geography, or OSI-open-source weights.
 
 ## Installation after publication
 
@@ -37,9 +55,25 @@ During development, core integration uses an explicit authenticated
 
 ## Workflow
 
-`workflows/comfycolab_ltx23_text_image_to_video.json` is the preserved example
-workflow. It contains one public facade, an optional disconnected `LoadImage`,
-and a native `SaveVideo` output.
+`workflows/comfycolab_ltx23_text_image_to_video.json` is the preserved LTX
+example workflow. It contains one public facade, an optional disconnected
+`LoadImage`, and a native `SaveVideo` output.
+
+`workflows/comfycolab_minimax_h3_text_image_to_video.json` contains one H3
+FL2VA loader, one H3 Text/Image facade, disconnected first/last `LoadImage`
+examples, and one native `SaveVideo`.
+
+`workflows/comfycolab_minimax_h3_reference_to_video.json` contains one H3
+Ref2VA loader, one H3 Reference facade, a reference image branch, a reference
+video branch with paired audio, a standalone audio branch, and one native
+`SaveVideo`. Prompt tags are one-based and connection-ordered: `<Picture 1>`,
+`<Video 1>`, and `<Audio 1>`.
+
+`workflows/comfycolab_minimax_h3_fl2va_to_ref2va_chain.json` is a proof
+workflow that uses separate FL2VA and Ref2VA loaders, then routes the FL2VA
+facade's decoded `frames` and `audio` outputs into the Ref2VA autogrow
+`ref_videos.ref_video_0` and `ref_video_audios.ref_video_audio_0` inputs before
+saving the Ref2VA video.
 
 ## Model provisioning
 
@@ -47,6 +81,28 @@ and a native `SaveVideo` output.
 revisions, byte sizes, and SHA-256 values for selected GGUFs, the Gemma text
 encoder, connector, video/audio VAEs, and spatial/temporal upscalers. Only
 assets required by the visible node settings are downloaded.
+
+`custom_nodes/ComfyColab-LTXVideo/catalog/minimax_h3.json` records the
+immutable `Comfy-Org/MiniMax-H3@0543966fbdce5ba05709a8f2031c94bdba629b4a`
+optimized Base assets. First use of either FL2VA or Ref2VA downloads
+`42,470,585,471` bytes. The shared Qwen3-VL text encoder and video/audio VAEs
+are `21,500,205,855` bytes, so installing the other H3 variant later downloads
+only the second `20,970,379,616` byte transformer. Keeping both variants uses
+`63,440,965,087` bytes.
+
+The H3 loader requires explicit acknowledgement that the user reviewed the
+MiniMax H3 Community License and is authorized to use the weights in their
+location before any folder creation, download, or model loading.
+
+## MiniMax H3 reference limits
+
+Ref2VA supports up to 9 reference images, 3 reference videos, 3 paired
+reference-video soundtracks, and 3 standalone audio clips. At least one image
+or video reference is required; audio alone is rejected. Each video/audio clip
+must be 2-15 seconds, total reference-video duration is capped at 15 seconds,
+total reference-audio duration is capped at 15 seconds, and the combined count
+of image, video, paired-audio, and standalone-audio reference files is capped
+at 12.
 
 ## Validation
 

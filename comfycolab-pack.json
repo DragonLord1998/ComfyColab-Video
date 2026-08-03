@@ -7,10 +7,10 @@
     "core_manifest_api": 1,
     "comfyui": {
       "compatible_refs": [
-        "8b099de36acd81acd1afa3b5442951dc847e0a52"
+        "57500fc5bc92566a63f2046824f522cd55c335ca"
       ],
       "tested_refs": [
-        "8b099de36acd81acd1afa3b5442951dc847e0a52"
+        "57500fc5bc92566a63f2046824f522cd55c335ca"
       ]
     }
   },
@@ -66,7 +66,10 @@
   },
   "runtime_env": {},
   "workflows": [
-    "workflows/comfycolab_ltx23_text_image_to_video.json"
+    "workflows/comfycolab_ltx23_text_image_to_video.json",
+    "workflows/comfycolab_minimax_h3_text_image_to_video.json",
+    "workflows/comfycolab_minimax_h3_reference_to_video.json",
+    "workflows/comfycolab_minimax_h3_fl2va_to_ref2va_chain.json"
   ],
   "probes": [
     {
@@ -75,16 +78,27 @@
       "path": "custom_nodes/ComfyColab-LTXVideo/catalog/ltx_2_3.json"
     },
     {
+      "phase": "post_clone",
+      "type": "path_exists",
+      "path": "custom_nodes/ComfyColab-LTXVideo/catalog/minimax_h3.json"
+    },
+    {
       "phase": "post_start",
       "type": "comfy_node_ids",
       "values": [
-        "ComfyColabLTX23Video"
+        "ComfyColabLTX23Video",
+        "ComfyColabMiniMaxH3BundleLoader",
+        "ComfyColabMiniMaxH3Video",
+        "ComfyColabMiniMaxH3ReferenceVideo"
       ]
     }
   ],
   "health_checks": {
     "node_ids": [
-      "ComfyColabLTX23Video"
+      "ComfyColabLTX23Video",
+      "ComfyColabMiniMaxH3BundleLoader",
+      "ComfyColabMiniMaxH3Video",
+      "ComfyColabMiniMaxH3ReferenceVideo"
     ]
   },
   "licenses": [
@@ -113,6 +127,20 @@
       "id": "gemma-3",
       "name": "Gemma Terms of Use",
       "url": "https://ai.google.dev/gemma/terms",
+      "notice": "THIRD_PARTY_NOTICES.md",
+      "scope": "model"
+    },
+    {
+      "id": "minimax-h3",
+      "name": "MiniMax H3 Community License Agreement",
+      "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
+      "notice": "THIRD_PARTY_NOTICES.md",
+      "scope": "model"
+    },
+    {
+      "id": "qwen3-vl",
+      "name": "Apache-2.0",
+      "url": "https://huggingface.co/Qwen/Qwen3-VL-32B-Instruct/blob/main/LICENSE",
       "notice": "THIRD_PARTY_NOTICES.md",
       "scope": "model"
     }

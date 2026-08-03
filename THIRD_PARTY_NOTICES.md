@@ -35,3 +35,32 @@ checksum-pins them but does not independently certify their numeric fidelity.
 Only the selected GGUF, shared encoder/connector/VAEs, and selected spatial or
 temporal upscalers are downloaded. Their exact artifact revisions, sizes, and
 SHA-256 values are recorded in `catalog/ltx_2_3.json`.
+
+## MiniMax H3 Base
+
+- Official model and license source: <https://huggingface.co/MiniMaxAI/MiniMax-H3>
+- MiniMax H3 Community License: <https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE>
+- Optimized Comfy bundle: <https://huggingface.co/Comfy-Org/MiniMax-H3>
+- Pinned optimized bundle revision: `0543966fbdce5ba05709a8f2031c94bdba629b4a`
+- Native ComfyUI implementation PR: <https://github.com/Comfy-Org/ComfyUI/pull/15224>
+- Minimum H3-capable ComfyUI merge commit: `57500fc5bc92566a63f2046824f522cd55c335ca`
+- Qwen3-VL text encoder family: <https://huggingface.co/Qwen/Qwen3-VL-32B-Instruct>
+- Qwen3-VL license: Apache-2.0
+
+MiniMax H3 weights are governed by the MiniMax H3 Community License Agreement,
+not an OSI open-source license. The public license text includes territory
+restrictions; this pack requires the user to acknowledge that they reviewed the
+license and are legally authorized to use the weights in their location before
+any H3 asset is downloaded or loaded. The plan for this pack specifically
+avoids claiming unrestricted use in the EU, UK, South Korea, or US unless the
+user has separate authorization.
+
+The local open-weight Base release supports 24 FPS audio-video generation in
+the 4-15 second range with a 768-pixel short-edge class canvas. This pack uses
+the optimized FL2VA and Ref2VA Base checkpoints and does not claim local 2K
+regeneration, hosted H3-Context-IR, sparse attention, fine-tuning support, or
+model-training workflows.
+
+Exact MiniMax H3 artifact revisions, byte sizes, and SHA-256 values are
+recorded in `catalog/minimax_h3.json`. ComfyColab Video downloads weights on
+first use; it does not redistribute them in this repository.

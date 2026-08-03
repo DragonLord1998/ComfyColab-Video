@@ -16,6 +16,13 @@ LTX_CATALOG_PATH = (
     / "catalog"
     / "ltx_2_3.json"
 )
+H3_CATALOG_PATH = (
+    ROOT
+    / "custom_nodes"
+    / "ComfyColab-LTXVideo"
+    / "catalog"
+    / "minimax_h3.json"
+)
 RESOLVE_PATTERN = re.compile(
     r"^/(?P<repo>[^/]+/[^/]+)/resolve/(?P<revision>[0-9a-f]{40})/(?P<path>.+)$"
 )
@@ -37,6 +44,22 @@ def catalog_entries():
                 str(specification["folder_key"]),
                 specification,
             )
+    h3_catalog = json.loads(H3_CATALOG_PATH.read_text(encoding="utf-8"))
+    for variant, payload in h3_catalog["variants"].items():
+        specification = payload["model"]
+        yield (
+            H3_CATALOG_PATH,
+            f"variants.{variant}.model",
+            str(specification["folder_key"]),
+            specification,
+        )
+    for name, specification in h3_catalog["shared"].items():
+        yield (
+            H3_CATALOG_PATH,
+            f"shared.{name}",
+            str(specification["folder_key"]),
+            specification,
+        )
 
 
 def model_tree(repo: str, revision: str) -> dict[str, dict[str, object]]:

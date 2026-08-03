@@ -25,6 +25,20 @@ SPATIAL_FILENAMES = {
     "2x": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
 }
 TEMPORAL_FILENAME = "ltx-2.3-temporal-upscaler-x2-1.0.safetensors"
+H3_REVISION = "0543966fbdce5ba05709a8f2031c94bdba629b4a"
+H3_FILENAMES = {
+    "FL2VA": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "Ref2VA": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+}
+H3_EXPECTED_SIZES = {
+    "FL2VA": 42470585471,
+    "Ref2VA": 42470585471,
+    "shared": 21500205855,
+    "both": 63440965087,
+}
 
 
 def load_package_module(module_name):
@@ -55,6 +69,13 @@ def all_assets(catalog_module):
         for asset in catalog["spatial_upscalers"].values()
         if asset is not None
     )
+    return assets
+
+
+def all_h3_assets(catalog_module):
+    catalog = catalog_module.load_h3_catalog()
+    assets = [catalog["variants"]["FL2VA"]["model"], catalog["variants"]["Ref2VA"]["model"]]
+    assets.extend(catalog["shared"].values())
     return assets
 
 
@@ -284,6 +305,94 @@ class LTXModelTests(unittest.TestCase):
                 sys.modules.pop("folder_paths", None)
             else:
                 sys.modules["folder_paths"] = previous
+
+    def test_h3_catalog_pins_optimized_base_assets_and_sizes(self):
+        catalog = load_package_module("catalog_h3")
+        assets = all_h3_assets(catalog)
+        by_filename = {asset["filename"]: asset for asset in assets}
+        self.assertEqual(set(by_filename), set(H3_FILENAMES.values()))
+        self.assertEqual(catalog.h3_variant_size_bytes("FL2VA"), H3_EXPECTED_SIZES["FL2VA"])
+        self.assertEqual(catalog.h3_variant_size_bytes("Ref2VA"), H3_EXPECTED_SIZES["Ref2VA"])
+        self.assertEqual(catalog.h3_shared_size_bytes(), H3_EXPECTED_SIZES["shared"])
+        self.assertEqual(catalog.h3_both_variants_size_bytes(), H3_EXPECTED_SIZES["both"])
+
+        expected_folders = {
+            H3_FILENAMES["FL2VA"]: "diffusion_models",
+            H3_FILENAMES["Ref2VA"]: "diffusion_models",
+            H3_FILENAMES["text_encoder"]: "text_encoders",
+            H3_FILENAMES["video_vae"]: "vae",
+            H3_FILENAMES["audio_vae"]: "vae",
+        }
+        expected_sha256 = {
+            H3_FILENAMES["FL2VA"]: "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a",
+            H3_FILENAMES["Ref2VA"]: "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779",
+            H3_FILENAMES["text_encoder"]: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6",
+            H3_FILENAMES["video_vae"]: "7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522",
+            H3_FILENAMES["audio_vae"]: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48",
+        }
+        for filename, asset in by_filename.items():
+            with self.subTest(filename=filename):
+                self.assertIn(f"/resolve/{H3_REVISION}/", asset["url"])
+                self.assertNotIn("/resolve/main/", asset["url"])
+                self.assertEqual(asset["folder_key"], expected_folders[filename])
+                self.assertEqual(asset["sha256"], expected_sha256[filename])
+                self.assertRegex(asset["sha256"], r"^[0-9a-f]{64}$")
+                self.assertIsInstance(asset["size_bytes"], int)
+                self.assertGreater(asset["size_bytes"], 0)
+
+    def test_h3_model_provisioning_downloads_variant_plus_shared_assets(self):
+        models = load_package_module("models_h3")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            roots = {
+                key: [str(root / key)]
+                for key in ("diffusion_models", "text_encoders", "vae")
+            }
+            folder_paths = types.SimpleNamespace(
+                get_folder_paths=lambda key: roots[key]
+            )
+            previous = sys.modules.get("folder_paths")
+            sys.modules["folder_paths"] = folder_paths
+            try:
+                for variant, model_filename in (
+                    ("FL2VA", H3_FILENAMES["FL2VA"]),
+                    ("Ref2VA", H3_FILENAMES["Ref2VA"]),
+                ):
+                    with self.subTest(variant=variant):
+                        calls = []
+
+                        def fake_download(*, destination, **kwargs):
+                            calls.append((destination, kwargs))
+                            destination.parent.mkdir(parents=True, exist_ok=True)
+                            destination.write_bytes(b"stub")
+                            return destination
+
+                        with mock.patch.object(
+                            models,
+                            "download_file",
+                            side_effect=fake_download,
+                        ):
+                            result = models.ensure_h3_model_assets(
+                                variant,
+                                force_redownload=True,
+                            )
+                        expected = {
+                            model_filename,
+                            H3_FILENAMES["text_encoder"],
+                            H3_FILENAMES["video_vae"],
+                            H3_FILENAMES["audio_vae"],
+                        }
+                        self.assertEqual({path.name for path, _ in calls}, expected)
+                        self.assertEqual(set(result.values()), expected)
+                        for destination, kwargs in calls:
+                            self.assertIn(destination.parent.name, roots)
+                            self.assertIs(kwargs["force"], True)
+                            self.assertRegex(kwargs["expected_sha256"], r"^[0-9a-f]{64}$")
+            finally:
+                if previous is None:
+                    sys.modules.pop("folder_paths", None)
+                else:
+                    sys.modules["folder_paths"] = previous
 
 
 if __name__ == "__main__":
