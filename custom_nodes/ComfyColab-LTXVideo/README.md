@@ -22,3 +22,16 @@ audio. The GGUF conversion is community supplied; the spatial and temporal
 upscalers are official Lighttricks assets. Local tests validate the graph and
 download contracts, but live Colab inference is still required to prove runtime
 memory use, audiovisual synchronization, and output quality.
+
+## MiniMax H3 Base
+
+This node root also exposes:
+
+- `ComfyColabMiniMaxH3BundleLoader`
+- `ComfyColabMiniMaxH3Video`
+- `ComfyColabMiniMaxH3ReferenceVideo`
+
+The H3 loader returns one `MINIMAX_H3_BUNDLE` output plus raw model, text
+encoder, video VAE, and audio VAE outputs. The FL2VA facade consumes only FL2VA
+bundles; the Ref2VA facade consumes only Ref2VA bundles and validates reference
+counts and durations before sampling.

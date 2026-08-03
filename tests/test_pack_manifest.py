@@ -29,7 +29,12 @@ EXPECTED_TOP_LEVEL = {
     "health_checks",
     "licenses",
 }
-EXPECTED_NODE_IDS = ["ComfyColabLTX23Video"]
+EXPECTED_NODE_IDS = [
+    "ComfyColabLTX23Video",
+    "ComfyColabMiniMaxH3BundleLoader",
+    "ComfyColabMiniMaxH3Video",
+    "ComfyColabMiniMaxH3ReferenceVideo",
+]
 
 
 def safe_relative_path(value: str) -> bool:
@@ -46,7 +51,7 @@ class PackManifestTests(unittest.TestCase):
         self.assertEqual(set(self.manifest), EXPECTED_TOP_LEVEL)
         self.assertEqual(self.manifest["schema"], 1)
         self.assertEqual(self.manifest["id"], "video")
-        self.assertEqual(self.manifest["version"], "0.2.0-dev1")
+        self.assertEqual(self.manifest["version"], "0.3.0-dev1")
         self.assertEqual(
             self.manifest["compatibility"]["core_manifest_api"],
             1,
@@ -78,7 +83,12 @@ class PackManifestTests(unittest.TestCase):
 
         self.assertEqual(
             self.manifest["workflows"],
-            ["workflows/comfycolab_ltx23_text_image_to_video.json"],
+            [
+                "workflows/comfycolab_ltx23_text_image_to_video.json",
+                "workflows/comfycolab_minimax_h3_text_image_to_video.json",
+                "workflows/comfycolab_minimax_h3_reference_to_video.json",
+                "workflows/comfycolab_minimax_h3_fl2va_to_ref2va_chain.json",
+            ],
         )
         for workflow in self.manifest["workflows"]:
             self.assertTrue(safe_relative_path(workflow))

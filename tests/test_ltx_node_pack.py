@@ -16,6 +16,9 @@ PACKAGE_DIR = ROOT / "custom_nodes" / "ComfyColab-LTXVideo"
 
 PUBLIC_NODE_ID = "ComfyColabLTX23Video"
 DISPLAY_NAME = "ComfyColab LTX-2.3 — Text/Image to Video"
+H3_LOADER_ID = "ComfyColabMiniMaxH3BundleLoader"
+H3_VIDEO_ID = "ComfyColabMiniMaxH3Video"
+H3_REFERENCE_ID = "ComfyColabMiniMaxH3ReferenceVideo"
 GGUF_OPTIONS = ["Q3_K_S", "Q4_K_S", "Q4_K_M"]
 FPS_OPTIONS = ["24", "48"]
 SPATIAL_OPTIONS = ["None", "1.5x", "2x"]
@@ -92,6 +95,25 @@ class FakeIO:
     class Hidden:
         unique_id = "UNIQUE_ID"
         prompt = "PROMPT"
+
+    class Autogrow:
+        Type = dict
+
+        class TemplatePrefix:
+            def __init__(self, input, prefix, min=0, max=100):
+                self.input = input
+                self.prefix = prefix
+                self.min = min
+                self.max = max
+
+        @staticmethod
+        def Input(name, template):
+            return {
+                "direction": "input",
+                "name": name,
+                "io_type": "COMFY_AUTOGROW_V3",
+                "template": template,
+            }
 
     @staticmethod
     def Custom(name):
@@ -182,6 +204,13 @@ REQUIRED_NATIVE_NODES = {
     "LTXVTiledVAEDecode",
     "LTXVAudioVAEDecode",
     "CreateVideo",
+    "UNETLoader",
+    "CLIPLoader",
+    "BasicScheduler",
+    "VAEDecode",
+    "VAEDecodeAudio",
+    "MiniMaxH3ImageToVideo",
+    "MiniMaxH3ReferenceToVideo",
 }
 
 
@@ -319,7 +348,7 @@ class LTXNodePackTests(unittest.TestCase):
             image=image,
         )
 
-    def test_import_is_lazy_and_exposes_one_public_facade_with_exact_schema(self):
+    def test_import_is_lazy_and_exposes_public_facades_with_exact_ltx_schema(self):
         before = set(sys.modules)
         package = load_package()
         imported = set(sys.modules) - before
@@ -335,7 +364,10 @@ class LTXNodePackTests(unittest.TestCase):
             for schema in schemas
             if not getattr(schema, "is_dev_only", False)
         ]
-        self.assertEqual(public, [PUBLIC_NODE_ID])
+        self.assertEqual(
+            public,
+            [PUBLIC_NODE_ID, H3_LOADER_ID, H3_VIDEO_ID, H3_REFERENCE_ID],
+        )
 
         schema = next(item for item in schemas if item.node_id == PUBLIC_NODE_ID)
         inputs = {item["name"]: item for item in schema.inputs}
@@ -365,6 +397,53 @@ class LTXNodePackTests(unittest.TestCase):
         self.assertTrue(inputs["image"]["optional"])
         self.assertIn("prompt", inputs)
         self.assertNotIn("negative_prompt", inputs)
+
+        h3_schema = next(item for item in schemas if item.node_id == H3_VIDEO_ID)
+        h3_inputs = {item["name"]: item for item in h3_schema.inputs}
+        self.assertEqual(h3_schema.category, "ComfyColab/Video")
+        self.assertTrue(h3_schema.enable_expand)
+        self.assertEqual(
+            [item["name"] for item in h3_schema.outputs],
+            ["video", "frames", "audio"],
+        )
+        self.assertEqual(h3_inputs["bundle"]["io_type"], "MINIMAX_H3_BUNDLE")
+        self.assertTrue(h3_inputs["first_frame"]["optional"])
+        self.assertTrue(h3_inputs["last_frame"]["optional"])
+        self.assertEqual(h3_inputs["duration_seconds"]["default"], 5.0)
+
+        ref_schema = next(item for item in schemas if item.node_id == H3_REFERENCE_ID)
+        ref_inputs = {item["name"]: item for item in ref_schema.inputs}
+        self.assertEqual(ref_inputs["scheduler"]["default"], "beta")
+        self.assertEqual(ref_inputs["scheduler"]["options"], ["beta", "normal", "simple"])
+        self.assertEqual(ref_inputs["ref_image_size"]["options"], ["match", "max"])
+        self.assertEqual(ref_inputs["ref_images"]["io_type"], "COMFY_AUTOGROW_V3")
+        self.assertEqual(ref_inputs["ref_images"]["template"].max, 9)
+        self.assertEqual(ref_inputs["ref_images"]["template"].prefix, "ref_image_")
+        self.assertEqual(ref_inputs["ref_images"]["template"].input["name"], "ref_image")
+        self.assertEqual(ref_inputs["ref_videos"]["template"].max, 3)
+        self.assertEqual(ref_inputs["ref_videos"]["template"].prefix, "ref_video_")
+        self.assertEqual(ref_inputs["ref_videos"]["template"].input["name"], "ref_video")
+        self.assertEqual(ref_inputs["ref_video_audios"]["template"].max, 3)
+        self.assertEqual(
+            ref_inputs["ref_video_audios"]["template"].prefix,
+            "ref_video_audio_",
+        )
+        self.assertEqual(
+            ref_inputs["ref_video_audios"]["template"].input["name"],
+            "ref_video_audio",
+        )
+        self.assertEqual(ref_inputs["ref_audios"]["template"].max, 3)
+        self.assertEqual(ref_inputs["ref_audios"]["template"].prefix, "ref_audio_")
+        self.assertEqual(ref_inputs["ref_audios"]["template"].input["name"], "ref_audio")
+
+        loader_schema = next(item for item in schemas if item.node_id == H3_LOADER_ID)
+        loader_inputs = {item["name"]: item for item in loader_schema.inputs}
+        self.assertEqual(loader_schema.category, "ComfyColab/loaders")
+        self.assertEqual(
+            [item["io_type"] for item in loader_schema.outputs],
+            ["MINIMAX_H3_BUNDLE", "MODEL", "CLIP", "VAE", "VAE"],
+        )
+        self.assertIs(loader_inputs["accept_h3_license_and_territory"]["default"], False)
 
     def test_graph_matrix_honors_gguf_fps_and_spatial_choices(self):
         _, nodes, graph, models = self._modules()
@@ -617,6 +696,333 @@ class LTXNodePackTests(unittest.TestCase):
                     seed=0,
                 )
         ensure.assert_not_called()
+
+    def test_h3_loader_license_gate_blocks_all_side_effects(self):
+        _, nodes, graph, models = self._modules()
+        loader = nodes.NODE_CLASS_MAPPINGS[H3_LOADER_ID]
+        with mock.patch.object(
+            nodes,
+            "ensure_h3_model_assets",
+            side_effect=AssertionError("download ran before license gate"),
+        ):
+            with self.assertRaisesRegex(PermissionError, "License|territory|acknowledge"):
+                loader.execute(accept_h3_license_and_territory=False)
+
+        with mock.patch.object(
+            nodes,
+            "ensure_h3_model_assets",
+            return_value={
+                "model": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+                "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+                "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+            },
+        ) as ensure:
+            calls = []
+
+            class Unet:
+                def load_unet(self, filename, weight_dtype="default"):
+                    calls.append(("unet", filename, weight_dtype))
+                    return ("MODEL_OBJECT",)
+
+            class Clip:
+                def load_clip(self, filename, type):
+                    calls.append(("clip", filename, type))
+                    return ("CLIP_OBJECT",)
+
+            class Vae:
+                def load_vae(self, filename):
+                    calls.append(("vae", filename))
+                    return (f"VAE_OBJECT:{filename}",)
+
+            sys.modules["nodes"].NODE_CLASS_MAPPINGS.update(
+                {"UNETLoader": Unet, "CLIPLoader": Clip, "VAELoader": Vae}
+            )
+            result = loader.execute(accept_h3_license_and_territory=True)
+
+        ensure.assert_called_once()
+        self.assertFalse(hasattr(result, "expand"))
+        bundle, model, clip, video_vae, audio_vae = result
+        self.assertEqual(bundle["variant"], "FL2VA")
+        self.assertEqual(bundle["family"], "minimax_h3")
+        self.assertEqual(bundle["model"], "MODEL_OBJECT")
+        self.assertEqual(model, "MODEL_OBJECT")
+        self.assertEqual(clip, "CLIP_OBJECT")
+        self.assertEqual(video_vae, "VAE_OBJECT:minimax_h3_video_vae_fp16.safetensors")
+        self.assertEqual(audio_vae, "VAE_OBJECT:minimax_h3_audio_vae_fp32.safetensors")
+        self.assertIn(
+            (
+                "clip",
+                "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+                "minimax",
+            ),
+            calls,
+        )
+
+    def test_h3_fl2va_graph_uses_native_audio_video_path_and_frame_grid(self):
+        _, nodes, _, _ = self._modules()
+        facade = nodes.NODE_CLASS_MAPPINGS[H3_VIDEO_ID]
+        bundle = self._h3_bundle("FL2VA")
+        first_frame = object()
+        last_frame = object()
+
+        result = facade.execute(
+            bundle=bundle,
+            prompt="A rainy street scene with synchronized footsteps.",
+            duration_seconds=5,
+            width=864,
+            height=480,
+            seed=123,
+            first_frame=first_frame,
+            last_frame=last_frame,
+        )
+        expanded = result.expand
+        node_types = [item["class_type"] for item in expanded]
+        self.assertEqual(node_types.count("MiniMaxH3ImageToVideo"), 1)
+        self.assertNotIn("EmptyMiniMaxH3LatentAV", node_types)
+        self.assertIn("VAEDecodeAudio", node_types)
+        self.assertIn("CreateVideo", node_types)
+        self.assertEqual(node_types.count("SamplerCustomAdvanced"), 1)
+        self.assertEqual(node_types.count("BasicScheduler"), 1)
+        conditioning = next(
+            item for item in expanded if item["class_type"] == "MiniMaxH3ImageToVideo"
+        )
+        self.assertIs(conditioning["inputs"]["first_frame"], first_frame)
+        self.assertIs(conditioning["inputs"]["last_frame"], last_frame)
+        self.assertEqual(conditioning["inputs"]["length"], 124)
+        self.assertEqual(conditioning["inputs"]["width"], 864)
+        self.assertEqual(conditioning["inputs"]["height"], 480)
+        sampler = next(item for item in expanded if item["class_type"] == "KSamplerSelect")
+        scheduler = next(item for item in expanded if item["class_type"] == "BasicScheduler")
+        create_video = next(item for item in expanded if item["class_type"] == "CreateVideo")
+        sampled_index = next(
+            index
+            for index, item in enumerate(expanded)
+            if item["class_type"] == "SamplerCustomAdvanced"
+        )
+        video_decode = next(item for item in expanded if item["class_type"] == "VAEDecode")
+        audio_decode = next(item for item in expanded if item["class_type"] == "VAEDecodeAudio")
+        self.assertEqual(sampler["inputs"]["sampler_name"], "res_multistep")
+        self.assertEqual(scheduler["inputs"]["scheduler"], "simple")
+        self.assertEqual(scheduler["inputs"]["steps"], 20)
+        self.assertEqual(float(create_video["inputs"]["fps"]), 24.0)
+        self.assertEqual(video_decode["inputs"]["samples"], Link(sampled_index, 0))
+        self.assertEqual(audio_decode["inputs"]["samples"], Link(sampled_index, 0))
+        self.assertEqual(
+            expanded[result.values[0].node_id]["class_type"],
+            "CreateVideo",
+        )
+        self.assertEqual(
+            expanded[result.values[2].node_id]["class_type"],
+            "VAEDecodeAudio",
+        )
+
+    def test_h3_ref2va_graph_preserves_reference_order_and_limits(self):
+        _, nodes, _, _ = self._modules()
+        facade = nodes.NODE_CLASS_MAPPINGS[H3_REFERENCE_ID]
+        bundle = self._h3_bundle("Ref2VA")
+        ref_image = object()
+        ref_video = {"frames": [object()] * 72}
+        paired_audio = {"waveform": [0.0] * 96000, "sample_rate": 32000}
+        standalone_audio = {"waveform": [0.0] * 80000, "sample_rate": 32000}
+
+        result = facade.execute(
+            bundle=bundle,
+            prompt="Use <Picture 1> for identity, <Video 1> for motion, and <Audio 1> for voice.",
+            duration_seconds=4,
+            width=864,
+            height=480,
+            seed=7,
+            ref_images={"ref_image_0": ref_image},
+            ref_videos={"ref_video_0": ref_video},
+            ref_video_audios={"ref_video_audio_0": paired_audio},
+            ref_audios={"ref_audio_0": standalone_audio},
+        )
+        expanded = result.expand
+        self.assertNotIn(
+            "EmptyMiniMaxH3LatentAV",
+            [item["class_type"] for item in expanded],
+        )
+        reference = next(
+            item for item in expanded if item["class_type"] == "MiniMaxH3ReferenceToVideo"
+        )
+        self.assertEqual(reference["inputs"]["ref_images"], {"ref_image_0": ref_image})
+        self.assertEqual(reference["inputs"]["ref_videos"], {"ref_video_0": ref_video})
+        self.assertIs(
+            reference["inputs"]["ref_video_audios"]["ref_video_audio_0"],
+            paired_audio,
+        )
+        self.assertIs(reference["inputs"]["ref_audios"]["ref_audio_0"], standalone_audio)
+        self.assertEqual(reference["inputs"]["length"], 107)
+        scheduler = next(item for item in expanded if item["class_type"] == "BasicScheduler")
+        self.assertEqual(scheduler["inputs"]["scheduler"], "beta")
+
+        with self.assertRaisesRegex(ValueError, "at least one image or video"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Audio only should fail.",
+                ref_audios={
+                    "ref_audio_0": {
+                        "waveform": [0.0] * 96000,
+                        "sample_rate": 32000,
+                    }
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "12 reference files"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Too many files.",
+                ref_images={f"ref_image_{index}": object() for index in range(9)},
+                ref_videos={"ref_video_0": {"frames": [object()] * 48}},
+                ref_video_audios={
+                    "ref_video_audio_0": {
+                        "waveform": [0.0] * 64000,
+                        "sample_rate": 32000,
+                    }
+                },
+                ref_audios={
+                    "ref_audio_0": {
+                        "waveform": [0.0] * 64000,
+                        "sample_rate": 32000,
+                    },
+                    "ref_audio_1": {
+                        "waveform": [0.0] * 64000,
+                        "sample_rate": 32000,
+                    },
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "Ref2VA bundle"):
+            facade.execute(
+                bundle=self._h3_bundle("FL2VA"),
+                prompt="Wrong family.",
+                ref_images={"ref_image_0": object()},
+            )
+
+    def test_h3_ref2va_malformed_autogrow_group_fails_closed(self):
+        _, nodes, _, _ = self._modules()
+        facade = nodes.NODE_CLASS_MAPPINGS[H3_REFERENCE_ID]
+        with self.assertRaisesRegex(ValueError, "expandable input groups"):
+            facade.execute(
+                bundle=self._h3_bundle("Ref2VA"),
+                prompt="Malformed autogrow bucket must not be ignored.",
+                ref_images={"ref_image_0": object()},
+                ref_videos="not-an-autogrow-group",
+            )
+
+    def test_h3_ref2va_reference_duration_derives_from_carriers_and_fails_closed(self):
+        _, nodes, _, _ = self._modules()
+        facade = nodes.NODE_CLASS_MAPPINGS[H3_REFERENCE_ID]
+        bundle = self._h3_bundle("Ref2VA")
+        facade.execute(
+            bundle=bundle,
+            prompt="Use <Video 1> and <Audio 1>.",
+            ref_videos={"ref_video_0": {"frames": [object()] * 48}},
+            ref_video_audios={
+                "ref_video_audio_0": {
+                    "waveform": [0.0] * 64000,
+                    "sample_rate": 32000,
+                }
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "reference videos"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Too short video.",
+                ref_videos={"ref_video_0": {"frames": [object()] * 47}},
+            )
+        with self.assertRaisesRegex(ValueError, "reference audio clips"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Too short audio.",
+                ref_images={"ref_image_0": object()},
+                ref_audios={
+                    "ref_audio_0": {
+                        "waveform": [0.0] * 63999,
+                        "sample_rate": 32000,
+                    }
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "video duration is unavailable"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Unknown video carrier.",
+                ref_videos={"ref_video_0": object()},
+            )
+        with self.assertRaisesRegex(ValueError, "video duration is unavailable"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Metadata-only video carrier.",
+                ref_videos={
+                    "ref_video_0": {
+                        "duration_seconds": 3.0,
+                        **{f"metadata_{index}": index for index in range(48)},
+                    }
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "waveform and sample_rate"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Unknown audio carrier.",
+                ref_images={"ref_image_0": object()},
+                ref_audios={"ref_audio_0": {"duration_seconds": 3.0}},
+            )
+        with self.assertRaisesRegex(ValueError, "total reference-video duration"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Too much video.",
+                ref_videos={
+                    "ref_video_0": {"frames": [object()] * 120},
+                    "ref_video_1": {"frames": [object()] * 120},
+                    "ref_video_2": {"frames": [object()] * 121},
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "total reference-audio duration"):
+            facade.execute(
+                bundle=bundle,
+                prompt="Too much audio.",
+                ref_images={"ref_image_0": object()},
+                ref_audios={
+                    "ref_audio_0": {
+                        "waveform": [0.0] * 160000,
+                        "sample_rate": 32000,
+                    },
+                    "ref_audio_1": {
+                        "waveform": [0.0] * 160000,
+                        "sample_rate": 32000,
+                    },
+                    "ref_audio_2": {
+                        "waveform": [0.0] * 160001,
+                        "sample_rate": 32000,
+                    },
+                },
+            )
+
+    def test_h3_validation_rejects_invalid_prompt_canvas_and_duration(self):
+        _, nodes, _, _ = self._modules()
+        facade = nodes.NODE_CLASS_MAPPINGS[H3_VIDEO_ID]
+        bundle = self._h3_bundle("FL2VA")
+        cases = (
+            {"prompt": "", "duration_seconds": 5, "width": 864, "height": 480},
+            {"prompt": "ok", "duration_seconds": 3, "width": 864, "height": 480},
+            {"prompt": "ok", "duration_seconds": 5, "width": 865, "height": 480},
+            {"prompt": "ok", "duration_seconds": 5, "width": 1376, "height": 768},
+        )
+        for kwargs in cases:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValueError):
+                    facade.execute(bundle=bundle, seed=1, **kwargs)
+
+    @staticmethod
+    def _h3_bundle(variant):
+        return {
+            "family": "minimax_h3",
+            "variant": variant,
+            "model": Link(100, 0),
+            "text_encoder": Link(101, 0),
+            "video_vae": Link(102, 0),
+            "audio_vae": Link(103, 0),
+            "filenames": {},
+        }
 
 
 if __name__ == "__main__":
