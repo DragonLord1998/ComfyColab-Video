@@ -18,6 +18,7 @@ H3_CHAIN_WORKFLOW = (
 )
 PUBLIC_NODE_ID = "ComfyColabLTX23Video"
 H3_LOADER_ID = "ComfyColabMiniMaxH3BundleLoader"
+H3_PROMPT_ID = "ComfyColabMiniMaxH3PromptEnhancer"
 H3_VIDEO_ID = "ComfyColabMiniMaxH3Video"
 H3_REFERENCE_ID = "ComfyColabMiniMaxH3ReferenceVideo"
 
@@ -124,29 +125,36 @@ class LTXWorkflowTests(unittest.TestCase):
 
     def test_h3_fl2va_workflow_uses_one_loader_one_facade_and_savevideo(self):
         workflow = json.loads(H3_FL2VA_WORKFLOW.read_text(encoding="utf-8"))
-        self.assertEqual(workflow["last_link_id"], 2)
+        self.assertEqual(workflow["last_link_id"], 3)
         nodes = {node["id"]: node for node in workflow["nodes"]}
         links = {link[0]: link for link in workflow["links"]}
         types = [node["type"] for node in nodes.values()]
         self.assertEqual(types.count(H3_LOADER_ID), 1)
+        self.assertEqual(types.count(H3_PROMPT_ID), 1)
         self.assertEqual(types.count(H3_VIDEO_ID), 1)
         self.assertEqual(types.count("SaveVideo"), 1)
         self.assertEqual(types.count("LoadImage"), 2)
 
         loader = next(node for node in nodes.values() if node["type"] == H3_LOADER_ID)
+        enhancer = next(node for node in nodes.values() if node["type"] == H3_PROMPT_ID)
         facade = next(node for node in nodes.values() if node["type"] == H3_VIDEO_ID)
         save = next(node for node in nodes.values() if node["type"] == "SaveVideo")
-        self.assertEqual(loader["widgets_values"][0], "FL2VA - Text / First / Last Frame")
+        self.assertEqual(loader["widgets_values"][0], "FL2VA — Text / First / Last Frame")
         self.assertIs(loader["widgets_values"][1], False)
         self.assertEqual(
             [output["type"] for output in loader["outputs"]],
             ["MINIMAX_H3_BUNDLE", "MODEL", "CLIP", "VAE", "VAE"],
         )
+        self.assertEqual(enhancer["widgets_values"][1], "T2VA — Text only")
+        self.assertEqual(enhancer["outputs"][0]["links"], [3])
         bundle_input = next(item for item in facade["inputs"] if item["name"] == "bundle")
+        prompt_input = next(item for item in facade["inputs"] if item["name"] == "prompt")
         first_input = next(item for item in facade["inputs"] if item["name"] == "first_frame")
         last_input = next(item for item in facade["inputs"] if item["name"] == "last_frame")
         video_input = next(item for item in save["inputs"] if item["name"] == "video")
         self.assertEqual(links[bundle_input["link"]][1:4], [loader["id"], 0, facade["id"]])
+        self.assertEqual(links[prompt_input["link"]][1:4], [enhancer["id"], 0, facade["id"]])
+        self.assertEqual(links[prompt_input["link"]][5], "STRING")
         self.assertIsNone(first_input["link"])
         self.assertIsNone(last_input["link"])
         self.assertEqual(links[video_input["link"]][1:4], [facade["id"], 0, save["id"]])
@@ -159,6 +167,7 @@ class LTXWorkflowTests(unittest.TestCase):
         links = {link[0]: link for link in workflow["links"]}
         types = [node["type"] for node in nodes.values()]
         self.assertEqual(types.count(H3_LOADER_ID), 1)
+        self.assertEqual(types.count(H3_PROMPT_ID), 1)
         self.assertEqual(types.count(H3_REFERENCE_ID), 1)
         self.assertEqual(types.count("SaveVideo"), 1)
         self.assertEqual(types.count("LoadImage"), 1)
@@ -167,21 +176,23 @@ class LTXWorkflowTests(unittest.TestCase):
         self.assertEqual(types.count("LoadAudio"), 1)
 
         loader = next(node for node in nodes.values() if node["type"] == H3_LOADER_ID)
+        enhancer = next(node for node in nodes.values() if node["type"] == H3_PROMPT_ID)
         facade = next(node for node in nodes.values() if node["type"] == H3_REFERENCE_ID)
         load_video = next(node for node in nodes.values() if node["type"] == "LoadVideo")
         components = next(node for node in nodes.values() if node["type"] == "GetVideoComponents")
         self.assertEqual(
             loader["widgets_values"][0],
-            "Ref2VA - Reference Images / Video / Audio",
+            "Ref2VA — Reference Images / Video / Audio",
         )
+        self.assertEqual(enhancer["widgets_values"][1], "Ref2VA — Full references")
         self.assertEqual(load_video["inputs"][0]["name"], "file")
-        self.assertEqual(load_video["widgets_values"], ["reference_motion.mp4"])
+        self.assertEqual(load_video["widgets_values"], ["reference_video_1.mp4"])
         self.assertEqual([output["type"] for output in load_video["outputs"]], ["VIDEO"])
         self.assertEqual(
             [output["type"] for output in components["outputs"]],
             ["IMAGE", "AUDIO", "FLOAT", "INT"],
         )
-        prompt = facade["widgets_values"][0]
+        prompt = enhancer["widgets_values"][0]
         self.assertIn("<Picture 1>", prompt)
         self.assertIn("<Video 1>", prompt)
         self.assertIn("<Audio 1>", prompt)
@@ -194,6 +205,7 @@ class LTXWorkflowTests(unittest.TestCase):
         self.assertEqual(
             {
                 "bundle",
+                "prompt",
                 "ref_images.ref_image_0",
                 "ref_videos.ref_video_0",
                 "ref_video_audios.ref_video_audio_0",
@@ -203,6 +215,8 @@ class LTXWorkflowTests(unittest.TestCase):
             True,
         )
         self.assertEqual(links[linked_inputs["bundle"]][5], "MINIMAX_H3_BUNDLE")
+        self.assertEqual(links[linked_inputs["prompt"]][1:4], [enhancer["id"], 0, facade["id"]])
+        self.assertEqual(links[linked_inputs["prompt"]][5], "STRING")
         self.assertEqual(links[linked_inputs["ref_images.ref_image_0"]][5], "IMAGE")
         self.assertEqual(links[7][1:4], [load_video["id"], 0, components["id"]])
         self.assertEqual(links[7][5], "VIDEO")
@@ -227,6 +241,7 @@ class LTXWorkflowTests(unittest.TestCase):
         links = {link[0]: link for link in workflow["links"]}
         types = [node["type"] for node in nodes.values()]
         self.assertEqual(types.count(H3_LOADER_ID), 2)
+        self.assertEqual(types.count(H3_PROMPT_ID), 2)
         self.assertEqual(types.count(H3_VIDEO_ID), 1)
         self.assertEqual(types.count(H3_REFERENCE_ID), 1)
         self.assertEqual(types.count("SaveVideo"), 1)
@@ -234,9 +249,14 @@ class LTXWorkflowTests(unittest.TestCase):
         self.assertEqual(
             [loader["widgets_values"][0] for loader in loaders],
             [
-                "FL2VA - Text / First / Last Frame",
-                "Ref2VA - Reference Images / Video / Audio",
+                "FL2VA — Text / First / Last Frame",
+                "Ref2VA — Reference Images / Video / Audio",
             ],
+        )
+        enhancers = [node for node in nodes.values() if node["type"] == H3_PROMPT_ID]
+        self.assertEqual(
+            [node["widgets_values"][1] for node in enhancers],
+            ["T2VA — Text only", "Ref2VA — Full references"],
         )
         reference = next(node for node in nodes.values() if node["type"] == H3_REFERENCE_ID)
         linked_inputs = {
@@ -245,6 +265,8 @@ class LTXWorkflowTests(unittest.TestCase):
             if item.get("link") is not None
         }
         self.assertEqual(links[linked_inputs["bundle"]][5], "MINIMAX_H3_BUNDLE")
+        self.assertEqual(links[linked_inputs["prompt"]][1:4], [7, 0, 4])
+        self.assertEqual(links[linked_inputs["prompt"]][5], "STRING")
         self.assertEqual(links[linked_inputs["ref_videos.ref_video_0"]][1:4], [2, 1, 4])
         self.assertEqual(links[linked_inputs["ref_videos.ref_video_0"]][5], "IMAGE")
         self.assertEqual(links[linked_inputs["ref_video_audios.ref_video_audio_0"]][1:4], [2, 2, 4])

@@ -46,14 +46,18 @@ SHA-256 values are recorded in `catalog/ltx_2_3.json`.
 - Minimum H3-capable ComfyUI merge commit: `57500fc5bc92566a63f2046824f522cd55c335ca`
 - Qwen3-VL text encoder family: <https://huggingface.co/Qwen/Qwen3-VL-32B-Instruct>
 - Qwen3-VL license: Apache-2.0
+- Prompt enhancer GGUF repository: <https://huggingface.co/unsloth/Qwen3.8-27B-GGUF>
+- Pinned prompt enhancer GGUF revision: `f1bfb127c64f7072bdd2cad55f258b9c8b2910fe`
+- Prompt enhancer GGUF file: `Qwen3.8-27B-Q4_K_M.gguf`
+- llama.cpp server: <https://github.com/ggml-org/llama.cpp>
+- Pinned llama.cpp revision: `16d222fc5ead59d20039501a37251c9ed457a454`
+- llama.cpp license: MIT
 
 MiniMax H3 weights are governed by the MiniMax H3 Community License Agreement,
-not an OSI open-source license. The public license text includes territory
-restrictions; this pack requires the user to acknowledge that they reviewed the
-license and are legally authorized to use the weights in their location before
-any H3 asset is downloaded or loaded. The plan for this pack specifically
-avoids claiming unrestricted use in the EU, UK, South Korea, or US unless the
-user has separate authorization.
+not an OSI open-source license. This pack requires the user to acknowledge that
+they reviewed the license before any H3 asset is downloaded or loaded. It does
+not perform country, IP, geolocation, or regional-availability checks; users
+remain responsible for verifying regional availability themselves.
 
 The local open-weight Base release supports 24 FPS audio-video generation in
 the 4-15 second range with a 768-pixel short-edge class canvas. This pack uses
@@ -64,3 +68,8 @@ model-training workflows.
 Exact MiniMax H3 artifact revisions, byte sizes, and SHA-256 values are
 recorded in `catalog/minimax_h3.json`. ComfyColab Video downloads weights on
 first use; it does not redistribute them in this repository.
+
+The prompt enhancer downloads the pinned Q4_K_M GGUF on first use and runs it
+through a checksum-pinned llama.cpp server. On G4/SM120 runtimes it can restore
+a precompiled cache from ComfyColab's GitHub Releases; otherwise it builds from
+the pinned llama.cpp source revision.

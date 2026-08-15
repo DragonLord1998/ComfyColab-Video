@@ -88,6 +88,7 @@
       "values": [
         "ComfyColabLTX23Video",
         "ComfyColabMiniMaxH3BundleLoader",
+        "ComfyColabMiniMaxH3PromptEnhancer",
         "ComfyColabMiniMaxH3Video",
         "ComfyColabMiniMaxH3ReferenceVideo"
       ]
@@ -97,6 +98,7 @@
     "node_ids": [
       "ComfyColabLTX23Video",
       "ComfyColabMiniMaxH3BundleLoader",
+      "ComfyColabMiniMaxH3PromptEnhancer",
       "ComfyColabMiniMaxH3Video",
       "ComfyColabMiniMaxH3ReferenceVideo"
     ]
@@ -143,6 +145,20 @@
       "url": "https://huggingface.co/Qwen/Qwen3-VL-32B-Instruct/blob/main/LICENSE",
       "notice": "THIRD_PARTY_NOTICES.md",
       "scope": "model"
+    },
+    {
+      "id": "qwen3-8-27b-gguf",
+      "name": "Apache-2.0",
+      "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+      "notice": "THIRD_PARTY_NOTICES.md",
+      "scope": "model"
+    },
+    {
+      "id": "llama-cpp",
+      "name": "MIT",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/16d222fc5ead59d20039501a37251c9ed457a454/LICENSE",
+      "notice": "THIRD_PARTY_NOTICES.md",
+      "scope": "code"
     }
   ]
 }

@@ -12,6 +12,8 @@ from .graph_h3 import (
     build_h3_reference_graph,
     build_h3_video_graph,
 )
+from .h3_prompt_policy import PROMPT_MODE_LABELS
+from .h3_prompt_worker import enhance_h3_prompt
 from .models import ensure_model_assets
 from .models_h3 import ensure_h3_model_assets
 
@@ -20,6 +22,8 @@ MAX_SEED = (2**63) - 1
 FPS_OPTIONS = ["24", "48"]
 H3_SCHEDULERS = ["beta", "normal", "simple"]
 H3_REF_IMAGE_SIZES = ["match", "max"]
+H3_ATTENTION_BACKEND = "sage"
+H3_PROMPT_MAX_SEED = (2**31) - 1
 
 
 def _collect_autogrow(values) -> dict[str, Any]:
@@ -79,6 +83,51 @@ def _h3_bundle_input(io: Any):
         "bundle",
         tooltip="Connect the one-cable output from MiniMax H3 Bundle Loader.",
     )
+
+
+def _h3_sage_attention() -> Any:
+    try:
+        attention = importlib.import_module("comfy.ldm.modules.attention")
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "MiniMax H3 requires the G4/SM120 SageAttention runtime. Select a "
+            "G4 runtime and restart with `comfycolab start --refresh`."
+        ) from error
+    getter = getattr(attention, "get_attention_function", None)
+    sage = getter(H3_ATTENTION_BACKEND, None) if callable(getter) else None
+    if sage is None:
+        raise RuntimeError(
+            "MiniMax H3 requires the G4/SM120 SageAttention 2.2.0 runtime. "
+            "Select a G4 runtime and restart with `comfycolab start --refresh`."
+        )
+    return sage
+
+
+def _patch_h3_sage_attention(model: Any, sage_attention: Any) -> Any:
+    if not hasattr(model, "clone") or not hasattr(model, "model_options"):
+        raise RuntimeError("MiniMax H3 received an incompatible ComfyUI model patcher.")
+    patched = model.clone()
+    transformer_options = patched.model_options.setdefault("transformer_options", {})
+    sage_impl = getattr(sage_attention, "__wrapped__", sage_attention)
+
+    def attention_override(_current_attention, *args, **kwargs):
+        return sage_impl(*args, **kwargs)
+
+    transformer_options["optimized_attention_override"] = attention_override
+    return patched
+
+
+def _release_comfy_gpu_models() -> None:
+    try:
+        model_management = importlib.import_module("comfy.model_management")
+    except ModuleNotFoundError:
+        return
+    unload = getattr(model_management, "unload_all_models", None)
+    if callable(unload):
+        unload()
+    empty_cache = getattr(model_management, "soft_empty_cache", None)
+    if callable(empty_cache):
+        empty_cache()
 
 
 class ComfyColabLTX23Video:
@@ -238,8 +287,9 @@ class ComfyColabMiniMaxH3BundleLoader:
             description=(
                 "Downloads, verifies, and loads the optimized MiniMax H3 Base "
                 "FL2VA or Ref2VA transformer plus the shared Qwen3-VL text encoder "
-                "and separate video/audio VAEs. The acknowledgement is required "
-                "before any filesystem or network side effect."
+                "and separate video/audio VAEs. The H3 diffusion model uses "
+                "model-scoped SageAttention for faster video sampling. Requires "
+                "explicit H3 license acknowledgement."
             ),
             inputs=[
                 io.Combo.Input(
@@ -249,13 +299,9 @@ class ComfyColabMiniMaxH3BundleLoader:
                     tooltip="FL2VA is for text, first-frame, last-frame, or both-frame generation. Ref2VA is for reference media.",
                 ),
                 io.Boolean.Input(
-                    "accept_h3_license_and_territory",
+                    "accept_h3_license",
                     default=False,
-                    tooltip=(
-                        "Required acknowledgement that you reviewed the MiniMax H3 "
-                        "Community License and are authorized to use the weights in "
-                        "your location."
-                    ),
+                    tooltip="Confirm that you reviewed the MiniMax H3 Community License.",
                 ),
                 io.Boolean.Input(
                     "force_redownload",
@@ -277,16 +323,17 @@ class ComfyColabMiniMaxH3BundleLoader:
     def execute(
         cls,
         model_variant=h3_variant_labels()[0],
-        accept_h3_license_and_territory=False,
+        accept_h3_license=False,
         force_redownload=False,
     ):
-        if not bool(accept_h3_license_and_territory):
+        if not bool(accept_h3_license):
             raise PermissionError(
-                "MiniMax H3 download is blocked until you acknowledge the H3 "
-                "Community License and territory restrictions."
+                "MiniMax H3 download requires accept_h3_license=true after reviewing "
+                "the MiniMax H3 Community License."
             )
         variant = normalize_h3_variant(model_variant)
         _require_upstream_nodes(FL2VA_REQUIRED_NODES | REF2VA_REQUIRED_NODES)
+        sage_attention = _h3_sage_attention()
         model_names = ensure_h3_model_assets(
             variant,
             force_redownload=bool(force_redownload),
@@ -296,6 +343,7 @@ class ComfyColabMiniMaxH3BundleLoader:
             model_names["model"],
             weight_dtype="default",
         )[0]
+        model = _patch_h3_sage_attention(model, sage_attention)
         text_encoder = _loader(comfy_nodes, "CLIPLoader").load_clip(
             model_names["text_encoder"],
             type="minimax",
@@ -313,9 +361,106 @@ class ComfyColabMiniMaxH3BundleLoader:
             "text_encoder": text_encoder,
             "video_vae": video_vae,
             "audio_vae": audio_vae,
+            "attention_backend": H3_ATTENTION_BACKEND,
             "filenames": dict(model_names),
         }
         return bundle, model, text_encoder, video_vae, audio_vae
+
+
+class ComfyColabMiniMaxH3PromptEnhancer:
+    @classmethod
+    def define_schema(cls):
+        io = _io()
+        return io.Schema(
+            node_id="ComfyColabMiniMaxH3PromptEnhancer",
+            display_name="ComfyColab MiniMax H3 - Prompt Enhancer",
+            category="ComfyColab/prompt",
+            description=(
+                "Rewrites a user prompt with thinking-enabled Qwen3.8-27B Q4_K_M "
+                "into the exact official MiniMax H3 Base or Ref2VA prompt structure. "
+                "The isolated llama.cpp process exits before H3 sampling."
+            ),
+            inputs=[
+                io.String.Input(
+                    "prompt",
+                    multiline=True,
+                    default="",
+                    tooltip="Your plain-language video idea. This output connects to an H3 prompt input.",
+                ),
+                io.Combo.Input(
+                    "prompt_mode",
+                    options=PROMPT_MODE_LABELS,
+                    default=PROMPT_MODE_LABELS[0],
+                    tooltip="Match this to the H3 input path and connected reference media.",
+                ),
+                io.Float.Input(
+                    "duration_seconds",
+                    default=5.0,
+                    min=4.0,
+                    max=15.0,
+                    step=0.25,
+                    tooltip="Must match the duration configured on the downstream H3 node.",
+                ),
+                io.Int.Input(
+                    "seed",
+                    default=0,
+                    min=0,
+                    max=H3_PROMPT_MAX_SEED,
+                    advanced=True,
+                ),
+                io.Int.Input(
+                    "max_tokens",
+                    default=8192,
+                    min=4096,
+                    max=16384,
+                    step=256,
+                    advanced=True,
+                    tooltip=(
+                        "Includes Qwen's bounded private reasoning plus the final "
+                        "structured prompt."
+                    ),
+                ),
+                io.Float.Input(
+                    "temperature",
+                    default=1.0,
+                    min=0.0,
+                    max=1.5,
+                    step=0.05,
+                    advanced=True,
+                    tooltip="Qwen3.8 thinking-mode sampling temperature.",
+                ),
+                io.Boolean.Input(
+                    "force_redownload",
+                    default=False,
+                    advanced=True,
+                    tooltip="Download and verify the pinned 17.1 GB Q4_K_M GGUF again.",
+                ),
+            ],
+            outputs=[io.String.Output("enhanced_prompt")],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        prompt,
+        prompt_mode=PROMPT_MODE_LABELS[0],
+        duration_seconds=5.0,
+        seed=0,
+        max_tokens=8192,
+        temperature=1.0,
+        force_redownload=False,
+    ):
+        _release_comfy_gpu_models()
+        enhanced = enhance_h3_prompt(
+            str(prompt),
+            str(prompt_mode),
+            float(duration_seconds),
+            seed=int(seed),
+            max_tokens=int(max_tokens),
+            temperature=float(temperature),
+            force_redownload=bool(force_redownload),
+        )
+        return (enhanced,)
 
 
 class ComfyColabMiniMaxH3Video:
@@ -533,6 +678,7 @@ class ComfyColabMiniMaxH3ReferenceVideo:
 PUBLIC_NODE_CLASS_MAPPINGS = {
     "ComfyColabLTX23Video": ComfyColabLTX23Video,
     "ComfyColabMiniMaxH3BundleLoader": ComfyColabMiniMaxH3BundleLoader,
+    "ComfyColabMiniMaxH3PromptEnhancer": ComfyColabMiniMaxH3PromptEnhancer,
     "ComfyColabMiniMaxH3Video": ComfyColabMiniMaxH3Video,
     "ComfyColabMiniMaxH3ReferenceVideo": ComfyColabMiniMaxH3ReferenceVideo,
 }
@@ -542,6 +688,7 @@ NODE_CLASS_MAPPINGS = dict(PUBLIC_NODE_CLASS_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyColabLTX23Video": "ComfyColab LTX-2.3 — Text/Image to Video",
     "ComfyColabMiniMaxH3BundleLoader": "MiniMax H3 Bundle Loader",
+    "ComfyColabMiniMaxH3PromptEnhancer": "ComfyColab MiniMax H3 - Prompt Enhancer",
     "ComfyColabMiniMaxH3Video": "ComfyColab MiniMax H3 - Text/Image to Video",
     "ComfyColabMiniMaxH3ReferenceVideo": "ComfyColab MiniMax H3 - Reference to Video",
 }

@@ -15,6 +15,9 @@ The MiniMax H3 facades expose:
 - `MiniMax H3 Bundle Loader`, which downloads one optimized FL2VA or Ref2VA
   transformer plus the three shared H3 components and returns one typed
   `MINIMAX_H3_BUNDLE` cable plus raw `MODEL`, `CLIP`, `VAE`, and `VAE` outputs.
+- `ComfyColab MiniMax H3 - Prompt Enhancer`, which rewrites a plain user prompt
+  into the official MiniMax H3 Base or Ref2VA prompt structure before the prompt
+  is connected to an H3 generation node.
 - `ComfyColab MiniMax H3 - Text/Image to Video`, which accepts an FL2VA bundle,
   a prompt, and optional first/last frames.
 - `ComfyColab MiniMax H3 - Reference to Video`, which accepts a Ref2VA bundle
@@ -98,8 +101,15 @@ only the second `20,970,379,616` byte transformer. Keeping both variants uses
 `63,440,965,087` bytes.
 
 The H3 loader requires explicit acknowledgement that the user reviewed the
-MiniMax H3 Community License and is authorized to use the weights in their
-location before any folder creation, download, or model loading.
+MiniMax H3 Community License before any model folder creation, download, or
+model loading. It does not perform country, IP, geolocation, or
+regional-availability checks.
+
+The `ComfyColab MiniMax H3 - Prompt Enhancer` node sits before the prompt input
+in every included H3 workflow. It uses thinking-enabled `Qwen/Qwen3.8-27B` with
+the pinned 17.1 GB `Q4_K_M` GGUF from Unsloth, an official MiniMax H3 prompting
+policy pinned to MiniMax's H3 prompt-writing guide, and an isolated llama.cpp
+server that exits before H3 sampling.
 
 ## MiniMax H3 reference limits
 

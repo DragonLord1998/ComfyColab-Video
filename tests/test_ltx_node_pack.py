@@ -17,6 +17,7 @@ PACKAGE_DIR = ROOT / "custom_nodes" / "ComfyColab-LTXVideo"
 PUBLIC_NODE_ID = "ComfyColabLTX23Video"
 DISPLAY_NAME = "ComfyColab LTX-2.3 — Text/Image to Video"
 H3_LOADER_ID = "ComfyColabMiniMaxH3BundleLoader"
+H3_PROMPT_ID = "ComfyColabMiniMaxH3PromptEnhancer"
 H3_VIDEO_ID = "ComfyColabMiniMaxH3Video"
 H3_REFERENCE_ID = "ComfyColabMiniMaxH3ReferenceVideo"
 GGUF_OPTIONS = ["Q3_K_S", "Q4_K_S", "Q4_K_M"]
@@ -221,6 +222,11 @@ class LTXNodePackTests(unittest.TestCase):
             for name in (
                 "comfy_api",
                 "comfy_api.latest",
+                "comfy",
+                "comfy.ldm",
+                "comfy.ldm.modules",
+                "comfy.ldm.modules.attention",
+                "comfy.model_management",
                 "comfy_execution",
                 "comfy_execution.graph_utils",
                 "folder_paths",
@@ -235,6 +241,16 @@ class LTXNodePackTests(unittest.TestCase):
         execution = types.ModuleType("comfy_execution")
         graph_utils = types.ModuleType("comfy_execution.graph_utils")
         graph_utils.GraphBuilder = GraphBuilder
+        comfy = types.ModuleType("comfy")
+        comfy_ldm = types.ModuleType("comfy.ldm")
+        comfy_ldm_modules = types.ModuleType("comfy.ldm.modules")
+        attention = types.ModuleType("comfy.ldm.modules.attention")
+        attention.get_attention_function = lambda name, _default=None: (
+            (lambda *args, **kwargs: ("sage", args, kwargs)) if name == "sage" else None
+        )
+        model_management = types.ModuleType("comfy.model_management")
+        model_management.unload_all_models = lambda: None
+        model_management.soft_empty_cache = lambda: None
         comfy_nodes = types.ModuleType("nodes")
         comfy_nodes.NODE_CLASS_MAPPINGS = {
             node_id: object for node_id in REQUIRED_NATIVE_NODES
@@ -249,6 +265,11 @@ class LTXNodePackTests(unittest.TestCase):
             {
                 "comfy_api": api,
                 "comfy_api.latest": latest,
+                "comfy": comfy,
+                "comfy.ldm": comfy_ldm,
+                "comfy.ldm.modules": comfy_ldm_modules,
+                "comfy.ldm.modules.attention": attention,
+                "comfy.model_management": model_management,
                 "comfy_execution": execution,
                 "comfy_execution.graph_utils": graph_utils,
                 "folder_paths": folder_paths,
@@ -366,7 +387,7 @@ class LTXNodePackTests(unittest.TestCase):
         ]
         self.assertEqual(
             public,
-            [PUBLIC_NODE_ID, H3_LOADER_ID, H3_VIDEO_ID, H3_REFERENCE_ID],
+            [PUBLIC_NODE_ID, H3_LOADER_ID, H3_PROMPT_ID, H3_VIDEO_ID, H3_REFERENCE_ID],
         )
 
         schema = next(item for item in schemas if item.node_id == PUBLIC_NODE_ID)
@@ -443,7 +464,23 @@ class LTXNodePackTests(unittest.TestCase):
             [item["io_type"] for item in loader_schema.outputs],
             ["MINIMAX_H3_BUNDLE", "MODEL", "CLIP", "VAE", "VAE"],
         )
-        self.assertIs(loader_inputs["accept_h3_license_and_territory"]["default"], False)
+        self.assertIs(loader_inputs["accept_h3_license"]["default"], False)
+
+        enhancer_schema = next(item for item in schemas if item.node_id == H3_PROMPT_ID)
+        enhancer_inputs = {item["name"]: item for item in enhancer_schema.inputs}
+        self.assertEqual(enhancer_schema.category, "ComfyColab/prompt")
+        self.assertEqual([item["name"] for item in enhancer_schema.outputs], ["enhanced_prompt"])
+        self.assertEqual(
+            enhancer_inputs["prompt_mode"]["options"],
+            [
+                "T2VA — Text only",
+                "I2VA — First frame",
+                "FL2VA — First + last frame",
+                "L2VA — Last frame",
+                "Ref2VA — Full references",
+            ],
+        )
+        self.assertEqual(enhancer_inputs["max_tokens"]["default"], 8192)
 
     def test_graph_matrix_honors_gguf_fps_and_spatial_choices(self):
         _, nodes, graph, models = self._modules()
@@ -705,8 +742,8 @@ class LTXNodePackTests(unittest.TestCase):
             "ensure_h3_model_assets",
             side_effect=AssertionError("download ran before license gate"),
         ):
-            with self.assertRaisesRegex(PermissionError, "License|territory|acknowledge"):
-                loader.execute(accept_h3_license_and_territory=False)
+            with self.assertRaisesRegex(PermissionError, "MiniMax H3 Community License"):
+                loader.execute(accept_h3_license=False)
 
         with mock.patch.object(
             nodes,
@@ -720,10 +757,19 @@ class LTXNodePackTests(unittest.TestCase):
         ) as ensure:
             calls = []
 
+            class Model:
+                def __init__(self):
+                    self.model_options = {}
+
+                def clone(self):
+                    cloned = Model()
+                    cloned.model_options = dict(self.model_options)
+                    return cloned
+
             class Unet:
                 def load_unet(self, filename, weight_dtype="default"):
                     calls.append(("unet", filename, weight_dtype))
-                    return ("MODEL_OBJECT",)
+                    return (Model(),)
 
             class Clip:
                 def load_clip(self, filename, type):
@@ -738,15 +784,16 @@ class LTXNodePackTests(unittest.TestCase):
             sys.modules["nodes"].NODE_CLASS_MAPPINGS.update(
                 {"UNETLoader": Unet, "CLIPLoader": Clip, "VAELoader": Vae}
             )
-            result = loader.execute(accept_h3_license_and_territory=True)
+            result = loader.execute(accept_h3_license=True)
 
         ensure.assert_called_once()
         self.assertFalse(hasattr(result, "expand"))
         bundle, model, clip, video_vae, audio_vae = result
         self.assertEqual(bundle["variant"], "FL2VA")
         self.assertEqual(bundle["family"], "minimax_h3")
-        self.assertEqual(bundle["model"], "MODEL_OBJECT")
-        self.assertEqual(model, "MODEL_OBJECT")
+        self.assertIs(bundle["model"], model)
+        self.assertEqual(bundle["attention_backend"], "sage")
+        self.assertIn("optimized_attention_override", model.model_options["transformer_options"])
         self.assertEqual(clip, "CLIP_OBJECT")
         self.assertEqual(video_vae, "VAE_OBJECT:minimax_h3_video_vae_fp16.safetensors")
         self.assertEqual(audio_vae, "VAE_OBJECT:minimax_h3_audio_vae_fp32.safetensors")
