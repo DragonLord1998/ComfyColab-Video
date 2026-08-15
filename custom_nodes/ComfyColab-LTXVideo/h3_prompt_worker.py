@@ -18,6 +18,7 @@ from typing import Any
 
 from .h3_prompt_policy import (
     MINIMAX_H3_GUIDE_REVISION,
+    normalize_enhanced_prompt,
     normalize_prompt_mode,
     system_policy,
     user_rewrite_request,
@@ -463,6 +464,7 @@ def build_chat_request_body(
     max_tokens: int,
     temperature: float,
     validation_errors: list[str],
+    previous_rewrite: str | None = None,
 ) -> dict[str, Any]:
     return {
         "model": QWEN_MODEL_ALIAS,
@@ -475,6 +477,7 @@ def build_chat_request_body(
                     mode,
                     duration_seconds,
                     validation_errors=validation_errors,
+                    previous_rewrite=previous_rewrite,
                 ),
             },
         ],
@@ -518,6 +521,7 @@ def _chat_request(
     max_tokens: int,
     temperature: float,
     validation_errors: list[str],
+    previous_rewrite: str | None,
 ) -> dict[str, Any]:
     body = build_chat_request_body(
         source_prompt=source_prompt,
@@ -527,6 +531,7 @@ def _chat_request(
         max_tokens=max_tokens,
         temperature=temperature,
         validation_errors=validation_errors,
+        previous_rewrite=previous_rewrite,
     )
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
@@ -603,6 +608,7 @@ def enhance_h3_prompt(
     log_path = log_dir / f"llama-server-{int(time.time())}.log"
     started = time.monotonic()
     validation_errors: list[str] = []
+    previous_rewrite: str | None = None
 
     print(
         "[comfycolab] Loading Qwen3.8-27B Q4_K_M in isolated llama.cpp server...",
@@ -627,8 +633,10 @@ def enhance_h3_prompt(
                     max_tokens=int(max_tokens),
                     temperature=float(temperature),
                     validation_errors=validation_errors,
+                    previous_rewrite=previous_rewrite,
                 )
-                enhanced = extract_enhanced_prompt(response)
+                raw_enhanced = extract_enhanced_prompt(response)
+                enhanced = normalize_enhanced_prompt(raw_enhanced, normalized_mode)
                 validation_errors = validate_enhanced_prompt(
                     enhanced,
                     normalized_mode,
@@ -646,6 +654,7 @@ def enhance_h3_prompt(
                                 "minimaxH3GuideRevision": MINIMAX_H3_GUIDE_REVISION,
                                 "mode": normalized_mode,
                                 "model": QWEN_GGUF_REPO,
+                                "retentionFormatNormalized": enhanced != raw_enhanced,
                                 "promptCharacters": len(enhanced),
                                 "promptSha256": hashlib.sha256(
                                     enhanced.encode("utf-8")
@@ -659,6 +668,7 @@ def enhance_h3_prompt(
                         flush=True,
                     )
                     return enhanced
+                previous_rewrite = enhanced
             raise RuntimeError(
                 "Qwen3.8 prompt rewrite failed MiniMax H3 validation after two "
                 "attempts: "
