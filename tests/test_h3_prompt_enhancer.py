@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import sys
 import tarfile
 import unittest
@@ -206,6 +207,12 @@ N/A"""
             worker.QWEN_GGUF_SHA256,
             "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169",
         )
+        self.assertEqual(worker.QWEN_MMPROJ_FILENAME, "mmproj-F16.gguf")
+        self.assertEqual(worker.QWEN_MMPROJ_SIZE, 927_607_488)
+        self.assertEqual(
+            worker.QWEN_MMPROJ_SHA256,
+            "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e",
+        )
         argv = worker.build_server_argv(
             Path("/runtime/llama-server"),
             Path("/models/qwen.gguf"),
@@ -217,6 +224,14 @@ N/A"""
         self.assertEqual(argv[argv.index("--n-gpu-layers") + 1], "all")
         self.assertEqual(argv[argv.index("--cache-type-k") + 1], "q8_0")
         self.assertEqual(argv[argv.index("--ctx-size") + 1], "32768")
+        vision_argv = worker.build_server_argv(
+            Path("/runtime/llama-server"),
+            Path("/models/qwen.gguf"),
+            8123,
+            mmproj=Path("/models/mmproj-F16.gguf"),
+        )
+        self.assertEqual(vision_argv[vision_argv.index("--mmproj") + 1], "/models/mmproj-F16.gguf")
+        self.assertEqual(vision_argv[vision_argv.index("--image-max-tokens") + 1], "2048")
         body = worker.build_chat_request_body(
             source_prompt="A cyclist opens an umbrella.",
             mode="T2VA",
@@ -256,12 +271,51 @@ N/A"""
         self.assertIn('"previous_rewrite":', retry_content)
         self.assertIn(": fully_preserved - explanation", retry_content)
 
+        vision = importlib.import_module(f"{worker.__package__}.qwen_image_prompt")
+        vision_body = vision.build_image_chat_request_body(
+            image_data_url="data:image/png;base64,AAAA",
+            source_prompt="Keep the face and lettering exact.",
+            seed=7,
+            max_tokens=4096,
+            temperature=1.0,
+        )
+        content = vision_body["messages"][1]["content"]
+        self.assertEqual(content[0]["type"], "image_url")
+        self.assertEqual(
+            content[0]["image_url"]["url"],
+            "data:image/png;base64,AAAA",
+        )
+        self.assertIn("Keep the face and lettering exact", content[1]["text"])
+        self.assertEqual(vision_body["reasoning_effort"], "xhigh")
+        self.assertTrue(vision_body["chat_template_kwargs"]["enable_thinking"])
+        self.assertEqual(vision_body["reasoning_budget_tokens"], 2048)
+        self.assertEqual(
+            vision_body["response_format"]["json_schema"]["schema"]["required"],
+            ["enhanced_prompt"],
+        )
+
         worker_source = (PACKAGE_DIR / "h3_prompt_worker.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn('"--no-checkout"', worker_source)
         self.assertIn('"-DGGML_NATIVE=ON"', worker_source)
         self.assertIn(worker.LLAMA_CPP_G4_CACHE_SHA256, worker_source)
+        previous_ld_path = os.environ.get("LD_LIBRARY_PATH")
+        os.environ["LD_LIBRARY_PATH"] = "/existing/lib"
+        try:
+            server_env = worker.server_process_env(
+                Path("/runtime/bin/llama-server")
+            )
+        finally:
+            if previous_ld_path is None:
+                os.environ.pop("LD_LIBRARY_PATH", None)
+            else:
+                os.environ["LD_LIBRARY_PATH"] = previous_ld_path
+        if sys.platform.startswith("linux"):
+            self.assertEqual(
+                server_env["LD_LIBRARY_PATH"],
+                "/runtime/bin:/existing/lib",
+            )
 
     def test_worker_extracts_only_schema_constrained_prompt(self):
         _policy, worker = load_modules()

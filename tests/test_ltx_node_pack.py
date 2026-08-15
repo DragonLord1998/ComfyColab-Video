@@ -18,6 +18,7 @@ PUBLIC_NODE_ID = "ComfyColabLTX23Video"
 DISPLAY_NAME = "ComfyColab LTX-2.3 — Text/Image to Video"
 H3_LOADER_ID = "ComfyColabMiniMaxH3BundleLoader"
 H3_PROMPT_ID = "ComfyColabMiniMaxH3PromptEnhancer"
+QWEN_IMAGE_PROMPT_ID = "ComfyColabQwen38ImagePromptEnhancer"
 H3_VIDEO_ID = "ComfyColabMiniMaxH3Video"
 H3_REFERENCE_ID = "ComfyColabMiniMaxH3ReferenceVideo"
 GGUF_OPTIONS = ["Q3_K_S", "Q4_K_S", "Q4_K_M"]
@@ -387,7 +388,14 @@ class LTXNodePackTests(unittest.TestCase):
         ]
         self.assertEqual(
             public,
-            [PUBLIC_NODE_ID, H3_LOADER_ID, H3_PROMPT_ID, H3_VIDEO_ID, H3_REFERENCE_ID],
+            [
+                PUBLIC_NODE_ID,
+                H3_LOADER_ID,
+                H3_PROMPT_ID,
+                QWEN_IMAGE_PROMPT_ID,
+                H3_VIDEO_ID,
+                H3_REFERENCE_ID,
+            ],
         )
 
         schema = next(item for item in schemas if item.node_id == PUBLIC_NODE_ID)
@@ -481,6 +489,26 @@ class LTXNodePackTests(unittest.TestCase):
             ],
         )
         self.assertEqual(enhancer_inputs["max_tokens"]["default"], 8192)
+
+        image_enhancer_schema = next(
+            item for item in schemas if item.node_id == QWEN_IMAGE_PROMPT_ID
+        )
+        self.assertEqual(image_enhancer_schema.category, "ComfyColab/prompt")
+        self.assertEqual(
+            [item["name"] for item in image_enhancer_schema.inputs],
+            [
+                "image",
+                "prompt",
+                "seed",
+                "max_tokens",
+                "temperature",
+                "force_redownload",
+            ],
+        )
+        self.assertEqual(
+            [item["name"] for item in image_enhancer_schema.outputs],
+            ["enhanced_prompt"],
+        )
 
     def test_graph_matrix_honors_gguf_fps_and_spatial_choices(self):
         _, nodes, graph, models = self._modules()

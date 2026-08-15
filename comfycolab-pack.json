@@ -89,6 +89,7 @@
         "ComfyColabLTX23Video",
         "ComfyColabMiniMaxH3BundleLoader",
         "ComfyColabMiniMaxH3PromptEnhancer",
+        "ComfyColabQwen38ImagePromptEnhancer",
         "ComfyColabMiniMaxH3Video",
         "ComfyColabMiniMaxH3ReferenceVideo"
       ]
@@ -99,6 +100,7 @@
       "ComfyColabLTX23Video",
       "ComfyColabMiniMaxH3BundleLoader",
       "ComfyColabMiniMaxH3PromptEnhancer",
+      "ComfyColabQwen38ImagePromptEnhancer",
       "ComfyColabMiniMaxH3Video",
       "ComfyColabMiniMaxH3ReferenceVideo"
     ]

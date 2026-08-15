@@ -31,6 +31,9 @@ QWEN_GGUF_REVISION = "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"
 QWEN_GGUF_FILENAME = "Qwen3.8-27B-Q4_K_M.gguf"
 QWEN_GGUF_SIZE = 17_106_775_008
 QWEN_GGUF_SHA256 = "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169"
+QWEN_MMPROJ_FILENAME = "mmproj-F16.gguf"
+QWEN_MMPROJ_SIZE = 927_607_488
+QWEN_MMPROJ_SHA256 = "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
 QWEN_MODEL_ALIAS = "qwen3.8-27b-q4_k_m"
 
 LLAMA_CPP_REPOSITORY = "https://github.com/ggml-org/llama.cpp.git"
@@ -137,8 +140,91 @@ def ensure_qwen_gguf(*, force_redownload: bool = False) -> Path:
         return downloaded
 
 
+def ensure_qwen_mmproj(*, force_redownload: bool = False) -> Path:
+    override = os.environ.get("COMFYCOLAB_QWEN_IMAGE_MMPROJ")
+    if override:
+        path = Path(override).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"COMFYCOLAB_QWEN_IMAGE_MMPROJ does not point to a file: {path}"
+            )
+        return path
+
+    marker = _runtime_root() / "qwen3.8-27b-mmproj-f16.json"
+    expected = {
+        "repo_id": QWEN_GGUF_REPO,
+        "revision": QWEN_GGUF_REVISION,
+        "filename": QWEN_MMPROJ_FILENAME,
+        "size_bytes": QWEN_MMPROJ_SIZE,
+        "sha256": QWEN_MMPROJ_SHA256,
+    }
+    with _INSTALL_LOCK:
+        if not force_redownload and marker.is_file():
+            try:
+                recorded = json.loads(marker.read_text(encoding="utf-8"))
+                cached = Path(str(recorded.get("path", "")))
+                if (
+                    {key: recorded.get(key) for key in expected} == expected
+                    and cached.is_file()
+                    and cached.stat().st_size == QWEN_MMPROJ_SIZE
+                ):
+                    return cached
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError as error:
+            raise RuntimeError(
+                "The Qwen Image Prompt Enhancer requires huggingface_hub with "
+                "hf-xet. Restart with `comfycolab start --refresh`."
+            ) from error
+
+        print(
+            "[comfycolab] Downloading pinned Qwen3.8 vision projector "
+            f"({QWEN_MMPROJ_SIZE / 1_000_000_000:.1f} GB)...",
+            flush=True,
+        )
+        downloaded = Path(
+            hf_hub_download(
+                repo_id=QWEN_GGUF_REPO,
+                filename=QWEN_MMPROJ_FILENAME,
+                revision=QWEN_GGUF_REVISION,
+                force_download=bool(force_redownload),
+            )
+        ).resolve()
+        actual_size = downloaded.stat().st_size
+        if actual_size != QWEN_MMPROJ_SIZE:
+            raise RuntimeError(
+                "Qwen3.8 vision projector size mismatch: "
+                f"expected {QWEN_MMPROJ_SIZE}, got {actual_size}."
+            )
+        actual_sha256 = _sha256(downloaded)
+        if actual_sha256 != QWEN_MMPROJ_SHA256:
+            raise RuntimeError(
+                "Qwen3.8 vision projector checksum mismatch: "
+                f"expected {QWEN_MMPROJ_SHA256}, got {actual_sha256}."
+            )
+        marker.write_text(
+            json.dumps({**expected, "path": str(downloaded)}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return downloaded
+
+
 def _git_output(*args: str) -> str:
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
+
+
+def server_process_env(server: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    if platform.system() == "Linux":
+        library_dir = str(server.resolve().parent)
+        existing = environment.get("LD_LIBRARY_PATH", "")
+        environment["LD_LIBRARY_PATH"] = (
+            f"{library_dir}:{existing}" if existing else library_dir
+        )
+    return environment
 
 
 def _cuda_compute_capability() -> str | None:
@@ -236,7 +322,14 @@ def _try_restore_g4_cache(
         shutil.move(str(staged_build), str(build))
         shutil.copy2(staged_marker, marker)
         binary = build / "bin" / "llama-server"
-        _git_output(str(binary), "--version")
+        subprocess.run(
+            [str(binary), "--version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=server_process_env(binary),
+        )
         print(
             "COMFYCOLAB_H3_CUDA_CACHE_RESTORED="
             + json.dumps(
@@ -379,8 +472,14 @@ def ensure_llama_server() -> Path:
         return binary
 
 
-def build_server_argv(server: Path, model: Path, port: int) -> list[str]:
-    return [
+def build_server_argv(
+    server: Path,
+    model: Path,
+    port: int,
+    *,
+    mmproj: Path | None = None,
+) -> list[str]:
+    argv = [
         str(server),
         "--model",
         str(model),
@@ -412,6 +511,18 @@ def build_server_argv(server: Path, model: Path, port: int) -> list[str]:
         "--reasoning-format",
         "deepseek",
     ]
+    if mmproj is not None:
+        argv.extend(
+            [
+                "--mmproj",
+                str(mmproj),
+                "--image-min-tokens",
+                "256",
+                "--image-max-tokens",
+                "2048",
+            ]
+        )
+    return argv
 
 
 def _free_local_port() -> int:
@@ -620,6 +731,7 @@ def enhance_h3_prompt(
             stdout=log_stream,
             stderr=subprocess.STDOUT,
             text=True,
+            env=server_process_env(server),
         )
         try:
             _wait_until_ready(process, port, log_path)
