@@ -103,6 +103,41 @@ non_diegetic_music:
 N/A"""
         self.assertEqual(policy.validate_enhanced_prompt(prompt, "Ref2VA", 5.0), [])
 
+    def test_ref_normalizer_repairs_format_variants_without_changing_markers(self):
+        policy, _worker = load_modules()
+        prompt = """subject_definitions:
+<Subject 1> is the cyclist shown in <Picture 1>.
+<Picture 1> is the first-frame composition anchor for [Shot 1].
+
+summary:
+[reference generation + keyframe completion] The target follows <Subject 1> from <Picture 1>.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): **FULLY-PRESERVED** — identity and clothing remain stable.
+<Picture 1> (visible at 00:00.000 in [Shot 1]): `attribute transfer`: the opening color palette is retained.
+
+detailed_description:
+The target uses realistic live-action photography with soft daylight.
+[Shot 1] <Subject 1> begins from <Picture 1> and pedals forward as the camera tracks alongside.
+
+overall_soundscape:
+Tires roll over pavement beneath light wind.
+
+non_diegetic_music:
+N/A"""
+        normalized = policy.normalize_enhanced_prompt(prompt, "Ref2VA")
+        self.assertIn(
+            "<Subject 1> (appears in [Shot 1]): fully_preserved - identity",
+            normalized,
+        )
+        self.assertIn(
+            "<Picture 1> (visible at 00:00.000 in [Shot 1]): attribute_transfer - the opening",
+            normalized,
+        )
+        self.assertEqual(
+            policy.validate_enhanced_prompt(normalized, "Ref2VA", 5.0), []
+        )
+
     def test_ref_validator_rejects_undefined_reference_label(self):
         policy, _worker = load_modules()
         prompt = """subject_definitions:
@@ -147,7 +182,8 @@ Tires roll over pavement.
 
 non_diegetic_music:
 N/A"""
-        errors = policy.validate_enhanced_prompt(prompt, "Ref2VA", 5.0)
+        normalized = policy.normalize_enhanced_prompt(prompt, "Ref2VA")
+        errors = policy.validate_enhanced_prompt(normalized, "Ref2VA", 5.0)
         self.assertIn("summary contains an invalid or repeated task type", errors)
         self.assertIn(
             "retention_analysis uses an invalid marker for <Subject 1>", errors
@@ -200,6 +236,23 @@ N/A"""
             response_schema["json_schema"]["schema"]["required"],
             ["enhanced_prompt"],
         )
+
+        retry_body = worker.build_chat_request_body(
+            source_prompt="A cyclist opens an umbrella.",
+            mode="Ref2VA",
+            duration_seconds=5.0,
+            seed=0,
+            max_tokens=4096,
+            temperature=1.0,
+            validation_errors=[
+                "retention_analysis uses an invalid marker for <Subject 1>"
+            ],
+            previous_rewrite="subject_definitions:\n<Subject 1> is a cyclist.",
+        )
+        retry_content = retry_body["messages"][1]["content"]
+        self.assertIn("complete previous rewrite supplied below", retry_content)
+        self.assertIn('"previous_rewrite":', retry_content)
+        self.assertIn(": fully_preserved - explanation", retry_content)
 
         worker_source = (PACKAGE_DIR / "h3_prompt_worker.py").read_text(
             encoding="utf-8"
