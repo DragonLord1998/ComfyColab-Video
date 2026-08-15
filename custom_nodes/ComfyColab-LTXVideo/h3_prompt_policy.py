@@ -61,6 +61,9 @@ _AUDIO_RETENTION_MARKERS = (
     "reference",
     "weak_reference",
 )
+_DEFINITIONS_SECTION_RE = re.compile(
+    r"(?ms)(^subject_definitions:[ \t]*\n)(.*?)(?=^summary:[ \t]*)"
+)
 _RETENTION_SECTION_RE = re.compile(
     r"(?ms)(^retention_analysis:[ \t]*\n)(.*?)(?=^detailed_description:[ \t]*)"
 )
@@ -149,6 +152,8 @@ FULL-REFERENCE OUTPUT CONTRACT
   visible content; a picture is a concrete frame/planning anchor; a video is an edit,
   continuation, or temporal-structure source; an audio label is copied or referenced
   audio. Do not invent a reference asset that the source prompt does not identify.
+- Write each subject_definitions entry as `<Subject 1> is ...`, `<Picture 1> is ...`,
+  `<Video 1> is ...`, or `<Audio 1> is ...`. Do not put a colon directly after a label.
 - summary is one short paragraph beginning with a square-bracketed combination of only
   these task types when applicable: keyframe completion, reference generation, video
   editing, video continuation, audio reuse, audio reference.
@@ -271,6 +276,26 @@ def normalize_enhanced_prompt(text: str, mode: str) -> str:
     if normalize_prompt_mode(mode) != "Ref2VA":
         return prompt
 
+    def normalize_definitions(match: re.Match[str]) -> str:
+        normalized_lines: list[str] = []
+        for raw_line in match.group(2).splitlines():
+            line = raw_line.strip()
+            label_match = _REFERENCE_RE.match(line)
+            if label_match is None:
+                normalized_lines.append(raw_line)
+                continue
+            colon_definition = re.fullmatch(
+                r"\s*:\s*(\S.*)", line[label_match.end() :]
+            )
+            if colon_definition is None:
+                normalized_lines.append(raw_line)
+                continue
+            normalized_lines.append(
+                f"{label_match.group(0)} is {colon_definition.group(1).strip()}"
+            )
+        body = "\n".join(normalized_lines).strip()
+        return match.group(1) + body + "\n\n"
+
     def normalize_section(match: re.Match[str]) -> str:
         normalized_lines: list[str] = []
         for raw_line in match.group(2).splitlines():
@@ -319,6 +344,7 @@ def normalize_enhanced_prompt(text: str, mode: str) -> str:
         body = "\n".join(normalized_lines).strip()
         return match.group(1) + body + "\n\n"
 
+    prompt = _DEFINITIONS_SECTION_RE.sub(normalize_definitions, prompt, count=1)
     return _RETENTION_SECTION_RE.sub(normalize_section, prompt, count=1).strip()
 
 
