@@ -106,8 +106,8 @@ N/A"""
     def test_ref_normalizer_repairs_format_variants_without_changing_markers(self):
         policy, _worker = load_modules()
         prompt = """subject_definitions:
-<Subject 1> is the cyclist shown in <Picture 1>.
-<Picture 1> is the first-frame composition anchor for [Shot 1].
+<Subject 1>: the cyclist shown in <Picture 1>.
+<Picture 1>: the first-frame composition anchor for [Shot 1].
 
 summary:
 [reference generation + keyframe completion] The target follows <Subject 1> from <Picture 1>.
@@ -126,6 +126,8 @@ Tires roll over pavement beneath light wind.
 non_diegetic_music:
 N/A"""
         normalized = policy.normalize_enhanced_prompt(prompt, "Ref2VA")
+        self.assertIn("<Subject 1> is the cyclist", normalized)
+        self.assertIn("<Picture 1> is the first-frame", normalized)
         self.assertIn(
             "<Subject 1> (appears in [Shot 1]): fully_preserved - identity",
             normalized,
