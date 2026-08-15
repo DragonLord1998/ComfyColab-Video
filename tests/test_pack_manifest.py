@@ -33,6 +33,7 @@ EXPECTED_NODE_IDS = [
     "ComfyColabLTX23Video",
     "ComfyColabMiniMaxH3BundleLoader",
     "ComfyColabMiniMaxH3PromptEnhancer",
+    "ComfyColabQwen38ImagePromptEnhancer",
     "ComfyColabMiniMaxH3Video",
     "ComfyColabMiniMaxH3ReferenceVideo",
 ]

@@ -18,6 +18,9 @@ The MiniMax H3 facades expose:
 - `ComfyColab MiniMax H3 - Prompt Enhancer`, which rewrites a plain user prompt
   into the official MiniMax H3 Base or Ref2VA prompt structure before the prompt
   is connected to an H3 generation node.
+- `ComfyColab Qwen3.8 - Image Prompt Enhancer`, which inspects the first image
+  with Qwen3.8 vision and thinking, then emits a detailed preservation prompt
+  suitable for PiD or another image-restoration node.
 - `ComfyColab MiniMax H3 - Text/Image to Video`, which accepts an FL2VA bundle,
   a prompt, and optional first/last frames.
 - `ComfyColab MiniMax H3 - Reference to Video`, which accepts a Ref2VA bundle
@@ -110,6 +113,12 @@ in every included H3 workflow. It uses thinking-enabled `Qwen/Qwen3.8-27B` with
 the pinned 17.1 GB `Q4_K_M` GGUF from Unsloth, an official MiniMax H3 prompting
 policy pinned to MiniMax's H3 prompt-writing guide, and an isolated llama.cpp
 server that exits before H3 sampling.
+
+The image prompt enhancer reuses that exact Q4 model and adds the matching,
+checksum-pinned `mmproj-F16.gguf` vision projector. It sends a downscaled PNG
+copy of the first input image only to the local llama.cpp server; no remote
+inference API is used. The server terminates before downstream image models are
+allocated.
 
 ## MiniMax H3 reference limits
 

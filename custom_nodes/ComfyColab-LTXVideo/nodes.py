@@ -16,6 +16,7 @@ from .h3_prompt_policy import PROMPT_MODE_LABELS
 from .h3_prompt_worker import enhance_h3_prompt
 from .models import ensure_model_assets
 from .models_h3 import ensure_h3_model_assets
+from .qwen_image_prompt import enhance_image_prompt
 
 
 MAX_SEED = (2**63) - 1
@@ -463,6 +464,86 @@ class ComfyColabMiniMaxH3PromptEnhancer:
         return (enhanced,)
 
 
+class ComfyColabQwen38ImagePromptEnhancer:
+    @classmethod
+    def define_schema(cls):
+        io = _io()
+        return io.Schema(
+            node_id="ComfyColabQwen38ImagePromptEnhancer",
+            display_name="ComfyColab Qwen3.8 - Image Prompt Enhancer",
+            category="ComfyColab/prompt",
+            description=(
+                "Uses thinking-enabled Qwen3.8-27B Q4_K_M plus its pinned vision "
+                "projector to inspect an image and write a faithful, detailed "
+                "upscaling prompt. The isolated llama.cpp process exits afterward."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "image",
+                    tooltip="Image to inspect. For a batch, the first image is analyzed.",
+                ),
+                io.String.Input(
+                    "prompt",
+                    multiline=True,
+                    default="Preserve and upscale this image faithfully.",
+                    tooltip="Optional guidance; visible image evidence remains authoritative.",
+                ),
+                io.Int.Input(
+                    "seed",
+                    default=0,
+                    min=0,
+                    max=H3_PROMPT_MAX_SEED,
+                    advanced=True,
+                ),
+                io.Int.Input(
+                    "max_tokens",
+                    default=4096,
+                    min=3072,
+                    max=8192,
+                    step=256,
+                    advanced=True,
+                    tooltip="Includes private visual reasoning and the final prompt.",
+                ),
+                io.Float.Input(
+                    "temperature",
+                    default=1.0,
+                    min=0.0,
+                    max=1.5,
+                    step=0.05,
+                    advanced=True,
+                ),
+                io.Boolean.Input(
+                    "force_redownload",
+                    default=False,
+                    advanced=True,
+                    tooltip="Download and verify the pinned Q4 GGUF and vision projector again.",
+                ),
+            ],
+            outputs=[io.String.Output("enhanced_prompt")],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        image,
+        prompt="Preserve and upscale this image faithfully.",
+        seed=0,
+        max_tokens=4096,
+        temperature=1.0,
+        force_redownload=False,
+    ):
+        _release_comfy_gpu_models()
+        enhanced = enhance_image_prompt(
+            image,
+            str(prompt),
+            seed=int(seed),
+            max_tokens=int(max_tokens),
+            temperature=float(temperature),
+            force_redownload=bool(force_redownload),
+        )
+        return (enhanced,)
+
+
 class ComfyColabMiniMaxH3Video:
     @classmethod
     def define_schema(cls):
@@ -679,6 +760,7 @@ PUBLIC_NODE_CLASS_MAPPINGS = {
     "ComfyColabLTX23Video": ComfyColabLTX23Video,
     "ComfyColabMiniMaxH3BundleLoader": ComfyColabMiniMaxH3BundleLoader,
     "ComfyColabMiniMaxH3PromptEnhancer": ComfyColabMiniMaxH3PromptEnhancer,
+    "ComfyColabQwen38ImagePromptEnhancer": ComfyColabQwen38ImagePromptEnhancer,
     "ComfyColabMiniMaxH3Video": ComfyColabMiniMaxH3Video,
     "ComfyColabMiniMaxH3ReferenceVideo": ComfyColabMiniMaxH3ReferenceVideo,
 }
@@ -689,6 +771,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyColabLTX23Video": "ComfyColab LTX-2.3 — Text/Image to Video",
     "ComfyColabMiniMaxH3BundleLoader": "MiniMax H3 Bundle Loader",
     "ComfyColabMiniMaxH3PromptEnhancer": "ComfyColab MiniMax H3 - Prompt Enhancer",
+    "ComfyColabQwen38ImagePromptEnhancer": "ComfyColab Qwen3.8 - Image Prompt Enhancer",
     "ComfyColabMiniMaxH3Video": "ComfyColab MiniMax H3 - Text/Image to Video",
     "ComfyColabMiniMaxH3ReferenceVideo": "ComfyColab MiniMax H3 - Reference to Video",
 }

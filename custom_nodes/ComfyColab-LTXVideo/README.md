@@ -30,6 +30,8 @@ This node root also exposes:
 - `ComfyColabMiniMaxH3BundleLoader`
 - `ComfyColabMiniMaxH3Video`
 - `ComfyColabMiniMaxH3ReferenceVideo`
+- `ComfyColabMiniMaxH3PromptEnhancer`
+- `ComfyColabQwen38ImagePromptEnhancer`
 
 The H3 loader returns one `MINIMAX_H3_BUNDLE` output plus raw model, text
 encoder, video VAE, and audio VAE outputs. The FL2VA facade consumes only FL2VA
