@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -55,7 +56,7 @@ def load_h3_catalog() -> dict[str, Any]:
         raise H3CatalogError(f"Unable to read the MiniMax H3 catalog: {error}") from error
     if catalog.get("schema_version") != 1:
         raise H3CatalogError("Unsupported MiniMax H3 catalog schema version.")
-    if catalog.get("repository") != "Comfy-Org/MiniMax-H3":
+    if catalog.get("repo_id", catalog.get("repository")) != "Comfy-Org/MiniMax-H3":
         raise H3CatalogError("MiniMax H3 catalog must use Comfy-Org/MiniMax-H3.")
     if catalog.get("revision") != H3_REVISION:
         raise H3CatalogError("MiniMax H3 catalog revision is not the approved pin.")
@@ -72,9 +73,15 @@ def load_h3_catalog() -> dict[str, Any]:
     for variant, value in variants.items():
         if not isinstance(value, dict):
             raise H3CatalogError(f"MiniMax H3 variant '{variant}' must be an object.")
-        _validate_file(f"variants.{variant}.model", value.get("model"))
+        _validate_file(f"variants.{variant}", value)
     for role, value in shared.items():
         _validate_file(f"shared.{role}", value)
+    catalog = deepcopy(catalog)
+    catalog["repository"] = catalog.get("repo_id", catalog.get("repository"))
+    catalog["variants"] = {
+        variant: value if "model" in value else {"model": value}
+        for variant, value in variants.items()
+    }
     return catalog
 
 

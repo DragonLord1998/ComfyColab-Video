@@ -32,6 +32,7 @@ EXPECTED_TOP_LEVEL = {
 EXPECTED_NODE_IDS = [
     "ComfyColabLTX23Video",
     "ComfyColabMiniMaxH3BundleLoader",
+    "ComfyColabMiniMaxH3PromptEnhancer",
     "ComfyColabMiniMaxH3Video",
     "ComfyColabMiniMaxH3ReferenceVideo",
 ]

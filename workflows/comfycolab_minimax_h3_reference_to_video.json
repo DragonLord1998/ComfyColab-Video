@@ -1,16 +1,22 @@
 {
-  "last_node_id": 7,
-  "last_link_id": 7,
+  "id": "34d18f34-9c94-4b71-9eaa-728a4a45904b",
+  "revision": 0,
+  "last_node_id": 8,
+  "last_link_id": 8,
   "nodes": [
     {
       "id": 1,
       "type": "ComfyColabMiniMaxH3BundleLoader",
-      "pos": [-780, 120],
-      "size": [360, 150],
+      "pos": [-860, -120],
+      "size": [430, 190],
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {"name": "model_variant", "type": "COMBO", "widget": {"name": "model_variant"}, "link": null},
+        {"name": "accept_h3_license", "type": "BOOLEAN", "widget": {"name": "accept_h3_license"}, "link": null},
+        {"name": "force_redownload", "type": "BOOLEAN", "widget": {"name": "force_redownload"}, "link": null}
+      ],
       "outputs": [
         {"name": "bundle", "type": "MINIMAX_H3_BUNDLE", "links": [1]},
         {"name": "model", "type": "MODEL", "links": null},
@@ -19,23 +25,19 @@
         {"name": "audio_vae", "type": "VAE", "links": null}
       ],
       "properties": {"Node name for S&R": "ComfyColabMiniMaxH3BundleLoader"},
-      "widgets_values": [
-        "Ref2VA - Reference Images / Video / Audio",
-        false,
-        false
-      ]
+      "widgets_values": ["Ref2VA — Reference Images / Video / Audio", false, false]
     },
     {
       "id": 2,
       "type": "ComfyColabMiniMaxH3ReferenceVideo",
-      "pos": [-300, 120],
-      "size": [500, 620],
+      "pos": [-300, -180],
+      "size": [560, 850],
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {"name": "bundle", "type": "MINIMAX_H3_BUNDLE", "link": 1},
-        {"name": "prompt", "type": "STRING", "widget": {"name": "prompt"}, "link": null},
+        {"name": "prompt", "type": "STRING", "widget": {"name": "prompt"}, "link": 8},
         {"name": "duration_seconds", "type": "FLOAT", "widget": {"name": "duration_seconds"}, "link": null},
         {"name": "width", "type": "INT", "widget": {"name": "width"}, "link": null},
         {"name": "height", "type": "INT", "widget": {"name": "height"}, "link": null},
@@ -43,8 +45,8 @@
         {"name": "ref_image_size", "type": "COMBO", "widget": {"name": "ref_image_size"}, "link": null},
         {"name": "scheduler", "type": "COMBO", "widget": {"name": "scheduler"}, "link": null},
         {"name": "ref_images.ref_image_0", "type": "IMAGE", "link": 3},
-        {"name": "ref_videos.ref_video_0", "type": "IMAGE", "link": 4},
-        {"name": "ref_video_audios.ref_video_audio_0", "type": "AUDIO", "link": 5},
+        {"name": "ref_videos.ref_video_0", "type": "IMAGE", "link": 5},
+        {"name": "ref_video_audios.ref_video_audio_0", "type": "AUDIO", "link": 4},
         {"name": "ref_audios.ref_audio_0", "type": "AUDIO", "link": 6}
       ],
       "outputs": [
@@ -54,11 +56,11 @@
       ],
       "properties": {"Node name for S&R": "ComfyColabMiniMaxH3ReferenceVideo"},
       "widgets_values": [
-        "Use <Picture 1> for the main character identity, <Video 1> for the camera move, and <Audio 1> for the voice texture. Generate a new five-second cinematic shot with synchronized room tone and dialogue.",
+        "Use <Picture 1> as the lead character reference. Match the camera rhythm from <Video 1> and carry the voice texture from <Audio 1> into a new street interview scene.",
         5.0,
         864,
         480,
-        67890,
+        0,
         "match",
         "beta"
       ]
@@ -66,47 +68,47 @@
     {
       "id": 3,
       "type": "SaveVideo",
-      "pos": [300, 120],
-      "size": [320, 126],
+      "pos": [380, -120],
+      "size": [330, 110],
       "flags": {},
-      "order": 2,
+      "order": 3,
       "mode": 0,
       "inputs": [
-        {"name": "video", "type": "VIDEO", "link": 2}
+        {"name": "video", "type": "VIDEO", "link": 2},
+        {"name": "filename_prefix", "type": "STRING", "widget": {"name": "filename_prefix"}, "link": null},
+        {"name": "format", "type": "COMBO", "widget": {"name": "format"}, "link": null},
+        {"name": "codec", "type": "COMBO", "widget": {"name": "codec"}, "link": null}
       ],
-      "outputs": [
-        {"name": "video", "type": "VIDEO", "links": null}
-      ],
+      "outputs": [],
       "properties": {"Node name for S&R": "SaveVideo"},
-      "widgets_values": [
-        "video/ComfyColab_MiniMax_H3_Ref2VA",
-        "auto",
-        "auto"
-      ]
+      "widgets_values": ["video/ComfyColab_MiniMax_H3_Ref2VA", "auto", "auto"]
     },
     {
       "id": 4,
       "type": "LoadImage",
-      "pos": [-780, 360],
+      "pos": [-860, 170],
       "size": [315, 314],
       "flags": {},
-      "order": 3,
+      "order": 4,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {"name": "image", "type": "COMBO", "widget": {"name": "image"}, "link": null},
+        {"name": "upload", "type": "IMAGEUPLOAD", "widget": {"name": "upload"}, "link": null}
+      ],
       "outputs": [
         {"name": "IMAGE", "type": "IMAGE", "links": [3]},
         {"name": "MASK", "type": "MASK", "links": null}
       ],
       "properties": {"Node name for S&R": "LoadImage"},
-      "widgets_values": ["reference_identity.png", "image"]
+      "widgets_values": ["reference_picture_1.png", "image"]
     },
     {
       "id": 5,
       "type": "LoadVideo",
-      "pos": [-780, 720],
-      "size": [315, 314],
+      "pos": [-860, 520],
+      "size": [315, 180],
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {"name": "file", "type": "COMBO", "widget": {"name": "file"}, "link": null}
@@ -115,55 +117,89 @@
         {"name": "VIDEO", "type": "VIDEO", "links": [7]}
       ],
       "properties": {"Node name for S&R": "LoadVideo"},
-      "widgets_values": ["reference_motion.mp4"]
+      "widgets_values": ["reference_video_1.mp4"]
     },
     {
       "id": 6,
       "type": "LoadAudio",
-      "pos": [-780, 1080],
+      "pos": [-510, 620],
       "size": [315, 120],
       "flags": {},
-      "order": 5,
+      "order": 6,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {"name": "audio", "type": "COMBO", "widget": {"name": "audio"}, "link": null}
+      ],
       "outputs": [
         {"name": "AUDIO", "type": "AUDIO", "links": [6]}
       ],
       "properties": {"Node name for S&R": "LoadAudio"},
-      "widgets_values": ["reference_voice.wav"]
+      "widgets_values": ["standalone_audio_1.wav"]
     },
     {
       "id": 7,
       "type": "GetVideoComponents",
-      "pos": [-420, 720],
+      "pos": [-510, 500],
       "size": [315, 150],
       "flags": {},
-      "order": 5,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {"name": "video", "type": "VIDEO", "link": 7}
       ],
       "outputs": [
-        {"name": "images", "type": "IMAGE", "links": [4]},
-        {"name": "audio", "type": "AUDIO", "links": [5]},
+        {"name": "images", "type": "IMAGE", "links": [5]},
+        {"name": "audio", "type": "AUDIO", "links": [4]},
         {"name": "frame_rate", "type": "FLOAT", "links": null},
         {"name": "frame_count", "type": "INT", "links": null}
       ],
       "properties": {"Node name for S&R": "GetVideoComponents"},
       "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "ComfyColabMiniMaxH3PromptEnhancer",
+      "pos": [-860, -610],
+      "size": [540, 440],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {"name": "prompt", "type": "STRING", "widget": {"name": "prompt"}, "link": null},
+        {"name": "prompt_mode", "type": "COMBO", "widget": {"name": "prompt_mode"}, "link": null},
+        {"name": "duration_seconds", "type": "FLOAT", "widget": {"name": "duration_seconds"}, "link": null},
+        {"name": "seed", "type": "INT", "widget": {"name": "seed"}, "link": null},
+        {"name": "max_tokens", "type": "INT", "widget": {"name": "max_tokens"}, "link": null},
+        {"name": "temperature", "type": "FLOAT", "widget": {"name": "temperature"}, "link": null},
+        {"name": "force_redownload", "type": "BOOLEAN", "widget": {"name": "force_redownload"}, "link": null}
+      ],
+      "outputs": [
+        {"name": "enhanced_prompt", "type": "STRING", "links": [8]}
+      ],
+      "properties": {"Node name for S&R": "ComfyColabMiniMaxH3PromptEnhancer"},
+      "widgets_values": [
+        "Use <Picture 1> as the lead character reference. Match the camera rhythm from <Video 1> and carry the voice texture from <Audio 1> into a new street interview scene.",
+        "Ref2VA — Full references",
+        5.0,
+        0,
+        8192,
+        1.0,
+        false
+      ]
     }
   ],
   "links": [
     [1, 1, 0, 2, 0, "MINIMAX_H3_BUNDLE"],
     [2, 2, 0, 3, 0, "VIDEO"],
     [3, 4, 0, 2, 8, "IMAGE"],
-    [4, 7, 0, 2, 9, "IMAGE"],
-    [5, 7, 1, 2, 10, "AUDIO"],
+    [4, 7, 1, 2, 10, "AUDIO"],
+    [5, 7, 0, 2, 9, "IMAGE"],
     [6, 6, 0, 2, 11, "AUDIO"],
-    [7, 5, 0, 7, 0, "VIDEO"]
+    [7, 5, 0, 7, 0, "VIDEO"],
+    [8, 8, 0, 2, 1, "STRING"]
   ],
   "groups": [],
   "config": {},
-  "extra": {},
+  "extra": {"workflowRendererVersion": "LG"},
   "version": 0.4
 }

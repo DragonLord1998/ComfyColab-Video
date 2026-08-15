@@ -15,6 +15,9 @@ The MiniMax H3 facades expose:
 - `MiniMax H3 Bundle Loader`, which downloads one optimized FL2VA or Ref2VA
   transformer plus the three shared H3 components and returns one typed
   `MINIMAX_H3_BUNDLE` cable plus raw `MODEL`, `CLIP`, `VAE`, and `VAE` outputs.
+- `ComfyColab MiniMax H3 — Prompt Enhancer`, which rewrites a plain user prompt
+  with the pinned Qwen3.8 27B Q4 GGUF and outputs a MiniMax H3-formatted
+  `STRING` for the downstream H3 prompt input.
 - `ComfyColab MiniMax H3 - Text/Image to Video`, which accepts an FL2VA bundle,
   a prompt, and optional first/last frames.
 - `ComfyColab MiniMax H3 - Reference to Video`, which accepts a Ref2VA bundle
@@ -67,14 +70,14 @@ example workflow. It contains one public facade, an optional disconnected
 `LoadImage`, and a native `SaveVideo` output.
 
 `workflows/comfycolab_minimax_h3_text_image_to_video.json` contains one H3
-FL2VA loader, one H3 Text/Image facade, disconnected first/last `LoadImage`
-examples, and one native `SaveVideo`.
+FL2VA loader, one H3 prompt enhancer, one H3 Text/Image facade, disconnected
+first/last `LoadImage` examples, and one native `SaveVideo`.
 
 `workflows/comfycolab_minimax_h3_reference_to_video.json` contains one H3
-Ref2VA loader, one H3 Reference facade, a reference image branch, a reference
-video branch with paired audio, a standalone audio branch, and one native
-`SaveVideo`. Prompt tags are one-based and connection-ordered: `<Picture 1>`,
-`<Video 1>`, and `<Audio 1>`.
+Ref2VA loader, one H3 prompt enhancer, one H3 Reference facade, a reference
+image branch, a reference video branch with paired audio, a standalone audio
+branch, and one native `SaveVideo`. Prompt tags are one-based and
+connection-ordered: `<Picture 1>`, `<Video 1>`, and `<Audio 1>`.
 
 `workflows/comfycolab_minimax_h3_fl2va_to_ref2va_chain.json` is a proof
 workflow that uses separate FL2VA and Ref2VA loaders, then routes the FL2VA

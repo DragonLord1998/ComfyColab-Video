@@ -1,28 +1,24 @@
 {
   "schema_version": 1,
-  "repository": "Comfy-Org/MiniMax-H3",
+  "family": "MiniMax H3 Base optimized",
+  "repo_id": "Comfy-Org/MiniMax-H3",
   "revision": "0543966fbdce5ba05709a8f2031c94bdba629b4a",
+  "license": "MiniMax H3 Community License",
   "default_variant": "FL2VA",
   "variants": {
     "FL2VA": {
-      "display_name": "FL2VA - Text / First / Last Frame",
-      "model": {
-        "filename": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-        "folder_key": "diffusion_models",
-        "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/0543966fbdce5ba05709a8f2031c94bdba629b4a/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-        "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a",
-        "size_bytes": 20970379616
-      }
+      "filename": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "folder_key": "diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/0543966fbdce5ba05709a8f2031c94bdba629b4a/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a",
+      "size_bytes": 20970379616
     },
     "Ref2VA": {
-      "display_name": "Ref2VA - Reference Images / Video / Audio",
-      "model": {
-        "filename": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
-        "folder_key": "diffusion_models",
-        "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/0543966fbdce5ba05709a8f2031c94bdba629b4a/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
-        "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779",
-        "size_bytes": 20970379616
-      }
+      "filename": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "folder_key": "diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/0543966fbdce5ba05709a8f2031c94bdba629b4a/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779",
+      "size_bytes": 20970379616
     }
   },
   "shared": {

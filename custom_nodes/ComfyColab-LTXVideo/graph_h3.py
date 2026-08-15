@@ -3,17 +3,14 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from .catalog_h3 import FL2VA, REF2VA
 
+BASE_FPS = 24
+BASE_MAX_AREA = 768 * 1344
+MAX_SEED = (2**63) - 1
 
-FPS = 24
-STEPS = 20
-AREA_CAP = 768 * 1344
-BASE_REQUIRED_NODES = frozenset(
+FL2VA_REQUIRED_NODES = frozenset(
     {
-        "UNETLoader",
-        "CLIPLoader",
-        "VAELoader",
+        "MiniMaxH3ImageToVideo",
         "RandomNoise",
         "BasicGuider",
         "KSamplerSelect",
@@ -24,8 +21,12 @@ BASE_REQUIRED_NODES = frozenset(
         "CreateVideo",
     }
 )
-FL2VA_REQUIRED_NODES = BASE_REQUIRED_NODES | {"MiniMaxH3ImageToVideo"}
-REF2VA_REQUIRED_NODES = BASE_REQUIRED_NODES | {"MiniMaxH3ReferenceToVideo"}
+REF2VA_REQUIRED_NODES = frozenset(
+    {
+        "MiniMaxH3ReferenceToVideo",
+        *FL2VA_REQUIRED_NODES,
+    }
+)
 
 
 def _builder():
@@ -37,153 +38,83 @@ def _finish(graph, video, images, audio):
     return io.NodeOutput(video, images, audio, expand=graph.finalize())
 
 
-def snap_h3_frame_count(duration_seconds: float) -> int:
-    requested = max(1, round(float(duration_seconds) * FPS))
-    return requested + ((5 - requested) % 17)
+def required_h3_nodes(reference: bool = False) -> set[str]:
+    return set(REF2VA_REQUIRED_NODES if reference else FL2VA_REQUIRED_NODES)
 
 
-def validate_h3_prompt_and_canvas(prompt: str, width: int, height: int) -> None:
-    if not str(prompt).strip():
-        raise ValueError("MiniMax H3 requires a non-empty prompt.")
-    if width % 32 or height % 32:
-        raise ValueError("MiniMax H3 width and height must be divisible by 32.")
-    if width * height > AREA_CAP:
-        raise ValueError(
-            "MiniMax H3 Base local output is capped at 768 x 1344 pixels of area."
-        )
+def snap_h3_frames(duration_seconds: float) -> int:
+    requested = max(5, round(float(duration_seconds) * BASE_FPS))
+    return requested + (5 - (requested % 17)) % 17
 
 
-def validate_h3_duration(duration_seconds: float) -> None:
-    if not 4.0 <= float(duration_seconds) <= 15.0:
-        raise ValueError("MiniMax H3 duration_seconds must be between 4 and 15.")
-
-
-def _component(bundle: dict[str, Any], name: str):
-    try:
-        return bundle[name]
-    except KeyError as error:
-        raise ValueError("MiniMax H3 bundle is missing loaded components.") from error
-
-
-def validate_h3_bundle(bundle: dict[str, Any], expected_variant: str) -> None:
-    if not isinstance(bundle, dict) or bundle.get("family") != "minimax_h3":
-        raise ValueError("Connect a bundle from MiniMax H3 Bundle Loader.")
-    variant = bundle.get("variant")
-    if variant != expected_variant:
-        if expected_variant == FL2VA:
-            raise ValueError("Use the Text/Image Video node with an FL2VA bundle.")
-        raise ValueError("Use the Reference Video node with a Ref2VA bundle.")
-
-
-def build_h3_video_graph(
+def validate_h3_common(
     *,
-    bundle: dict[str, Any],
     prompt: str,
     duration_seconds: float,
     width: int,
     height: int,
     seed: int,
-    first_frame: Any | None = None,
-    last_frame: Any | None = None,
-):
-    validate_h3_bundle(bundle, FL2VA)
-    validate_h3_duration(duration_seconds)
-    validate_h3_prompt_and_canvas(prompt, width, height)
-    length = snap_h3_frame_count(duration_seconds)
-    graph = _builder()
-    conditioning = graph.node(
-        "MiniMaxH3ImageToVideo",
-        clip=_component(bundle, "text_encoder"),
-        vae=_component(bundle, "video_vae"),
-        first_frame=first_frame,
-        last_frame=last_frame,
-        prompt=str(prompt),
-        width=width,
-        height=height,
-        length=length,
-    )
-    return _build_sampling_tail(
-        graph=graph,
-        bundle=bundle,
-        conditioning=conditioning.out(0),
-        latent=conditioning.out(1),
-        seed=seed,
-        scheduler="simple",
-    )
+) -> int:
+    if not str(prompt).strip():
+        raise ValueError("MiniMax H3 requires a non-empty prompt.")
+    if not 4.0 <= float(duration_seconds) <= 15.0:
+        raise ValueError("MiniMax H3 duration_seconds must be between 4 and 15.")
+    if width % 32 or height % 32:
+        raise ValueError("MiniMax H3 width and height must be divisible by 32.")
+    if width * height > BASE_MAX_AREA:
+        raise ValueError("MiniMax H3 Base canvas must not exceed 768 x 1344 pixels.")
+    if seed < 0 or seed > MAX_SEED:
+        raise ValueError(f"seed must be between 0 and {MAX_SEED}.")
+    return snap_h3_frames(duration_seconds)
 
 
-def validate_h3_references(
+def require_h3_bundle(bundle: dict[str, Any], expected_variant: str) -> None:
+    if not isinstance(bundle, dict) or bundle.get("family") != "minimax_h3":
+        raise ValueError("MiniMax H3 requires a bundle from MiniMax H3 Bundle Loader.")
+    variant = bundle.get("variant")
+    if variant != expected_variant:
+        target = "Reference Video node" if variant == "Ref2VA" else "Text/Image Video node"
+        raise ValueError(f"MiniMax H3 {variant or 'unknown'} bundle is incompatible; use the {target}.")
+
+
+def validate_reference_inputs(
     *,
     ref_images: dict[str, Any],
     ref_videos: dict[str, Any],
     ref_video_audios: dict[str, Any],
     ref_audios: dict[str, Any],
 ) -> None:
-    image_count = len(ref_images)
-    video_count = len(ref_videos)
-    standalone_audio_count = len(ref_audios)
-    paired_audio_count = len(ref_video_audios)
-    if image_count == 0 and video_count == 0:
-        raise ValueError("MiniMax H3 Ref2VA requires at least one image or video reference.")
-    if image_count > 9 or video_count > 3 or standalone_audio_count > 3:
-        raise ValueError("MiniMax H3 Ref2VA reference counts exceed native limits.")
+    if not ref_images and not ref_videos:
+        raise ValueError("MiniMax H3 Ref2VA requires at least one reference image or video.")
+    if len(ref_images) > 9:
+        raise ValueError("MiniMax H3 Ref2VA accepts at most 9 reference images.")
+    if len(ref_videos) > 3:
+        raise ValueError("MiniMax H3 Ref2VA accepts at most 3 reference videos.")
     for key in ref_video_audios:
         index = _reference_index(key)
-        if _matching_reference_key(ref_videos, index) is None:
-            raise ValueError("MiniMax H3 paired video audio must match a reference video.")
-    if image_count + video_count + standalone_audio_count + paired_audio_count > 12:
+        video_key = _matching_reference_key(ref_videos, index)
+        if video_key is None:
+            raise ValueError("Paired reference audio requires the matching reference video.")
+    if len(ref_audios) > 3:
+        raise ValueError("MiniMax H3 Ref2VA accepts at most 3 standalone audio clips.")
+    total_files = len(ref_images) + len(ref_videos) + len(ref_video_audios) + len(ref_audios)
+    if total_files > 12:
         raise ValueError("MiniMax H3 Ref2VA accepts at most 12 reference files total.")
-    video_durations = [_video_duration_seconds(value) for value in ref_videos.values()]
+    video_durations = [_video_duration_seconds(video) for video in ref_videos.values()]
     audio_durations = [
-        _audio_duration_seconds(value)
-        for value in [*ref_video_audios.values(), *ref_audios.values()]
+        _audio_duration_seconds(audio)
+        for audio in [*ref_video_audios.values(), *ref_audios.values()]
     ]
     for duration in video_durations:
         if not 2.0 <= duration <= 15.0:
-            raise ValueError("MiniMax H3 reference videos must be 2 to 15 seconds long.")
+            raise ValueError("MiniMax H3 Ref2VA reference videos must be 2-15 seconds at 24 FPS.")
     for duration in audio_durations:
         if not 2.0 <= duration <= 15.0:
-            raise ValueError("MiniMax H3 reference audio clips must be 2 to 15 seconds long.")
+            raise ValueError("MiniMax H3 Ref2VA reference audio clips must be 2-15 seconds.")
     if sum(video_durations) > 15.0:
-        raise ValueError("MiniMax H3 total reference-video duration must be at most 15 seconds.")
+        raise ValueError("MiniMax H3 Ref2VA total reference-video duration must be at most 15 seconds.")
     if sum(audio_durations) > 15.0:
-        raise ValueError("MiniMax H3 total reference-audio duration must be at most 15 seconds.")
-
-
-def _video_duration_seconds(value: Any) -> float:
-    if isinstance(value, dict):
-        if "frames" in value:
-            return _frame_count(value["frames"]) / FPS
-        raise ValueError("MiniMax H3 reference video duration is unavailable.")
-    return _frame_count(value) / FPS
-
-
-def _frame_count(frames: Any) -> int:
-    if hasattr(frames, "shape") and frames.shape:
-        return int(frames.shape[0])
-    try:
-        return len(frames)
-    except TypeError as error:
-        raise ValueError("MiniMax H3 reference video duration is unavailable.") from error
-
-
-def _audio_duration_seconds(value: Any) -> float:
-    if not isinstance(value, dict):
-        raise ValueError("MiniMax H3 reference audio must include waveform and sample_rate.")
-    waveform = value.get("waveform")
-    sample_rate = int(value.get("sample_rate") or 0)
-    if waveform is None or sample_rate <= 0:
-        raise ValueError("MiniMax H3 reference audio must include waveform and sample_rate.")
-    return _sample_count(waveform) / sample_rate
-
-
-def _sample_count(waveform: Any) -> int:
-    if hasattr(waveform, "shape") and waveform.shape:
-        return int(waveform.shape[-1])
-    try:
-        return len(waveform)
-    except TypeError as error:
-        raise ValueError("MiniMax H3 reference audio duration is unavailable.") from error
+        raise ValueError("MiniMax H3 Ref2VA total reference-audio duration must be at most 15 seconds.")
 
 
 def _reference_index(key: str) -> str:
@@ -198,82 +129,62 @@ def _matching_reference_key(values: dict[str, Any], index: str) -> str | None:
     return None
 
 
-def build_h3_reference_graph(
-    *,
-    bundle: dict[str, Any],
-    prompt: str,
-    duration_seconds: float,
-    width: int,
-    height: int,
-    seed: int,
-    ref_image_size: str,
-    scheduler: str,
-    ref_images: dict[str, Any],
-    ref_videos: dict[str, Any],
-    ref_video_audios: dict[str, Any],
-    ref_audios: dict[str, Any],
-):
-    validate_h3_bundle(bundle, REF2VA)
-    validate_h3_duration(duration_seconds)
-    validate_h3_prompt_and_canvas(prompt, width, height)
-    if ref_image_size not in {"match", "max"}:
-        raise ValueError("MiniMax H3 ref_image_size must be match or max.")
-    if scheduler not in {"beta", "normal", "simple"}:
-        raise ValueError("MiniMax H3 scheduler must be beta, normal, or simple.")
-    validate_h3_references(
-        ref_images=ref_images,
-        ref_videos=ref_videos,
-        ref_video_audios=ref_video_audios,
-        ref_audios=ref_audios,
-    )
-    length = snap_h3_frame_count(duration_seconds)
-    graph = _builder()
-    inputs = {
-        "clip": _component(bundle, "text_encoder"),
-        "vae": _component(bundle, "video_vae"),
-        "audio_vae": _component(bundle, "audio_vae"),
-        "prompt": str(prompt),
-        "width": width,
-        "height": height,
-        "length": length,
-        "ref_image_size": ref_image_size,
-        "ref_images": ref_images,
-        "ref_videos": ref_videos,
-        "ref_video_audios": ref_video_audios,
-        "ref_audios": ref_audios,
-    }
-    conditioning = graph.node("MiniMaxH3ReferenceToVideo", **inputs)
-    return _build_sampling_tail(
-        graph=graph,
-        bundle=bundle,
-        conditioning=conditioning.out(0),
-        latent=conditioning.out(1),
-        seed=seed,
-        scheduler=scheduler,
-    )
+def _video_duration_seconds(video: Any) -> float:
+    if isinstance(video, dict):
+        if "frames" in video:
+            return _frame_count(video["frames"]) / BASE_FPS
+        raise ValueError("MiniMax H3 Ref2VA reference video duration is unavailable.")
+    return _frame_count(video) / BASE_FPS
 
 
-def _build_sampling_tail(
-    *,
+def _frame_count(frames: Any) -> int:
+    if hasattr(frames, "shape") and frames.shape:
+        return int(frames.shape[0])
+    try:
+        return len(frames)
+    except TypeError as error:
+        raise ValueError("MiniMax H3 Ref2VA reference video duration is unavailable.") from error
+
+
+def _audio_duration_seconds(audio: Any) -> float:
+    if not isinstance(audio, dict):
+        raise ValueError("MiniMax H3 Ref2VA reference audio must include waveform and sample_rate.")
+    sample_rate = int(audio.get("sample_rate") or 0)
+    waveform = audio.get("waveform")
+    if sample_rate <= 0 or waveform is None:
+        raise ValueError("MiniMax H3 Ref2VA reference audio must include waveform and sample_rate.")
+    samples = _sample_count(waveform)
+    return samples / sample_rate
+
+
+def _sample_count(waveform: Any) -> int:
+    if hasattr(waveform, "shape") and waveform.shape:
+        return int(waveform.shape[-1])
+    try:
+        return len(waveform)
+    except TypeError as error:
+        raise ValueError("MiniMax H3 Ref2VA reference audio duration is unavailable.") from error
+
+
+def _sampling_tail(
     graph,
-    bundle: dict[str, Any],
+    *,
+    model,
     conditioning,
     latent,
+    video_vae,
+    audio_vae,
     seed: int,
     scheduler: str,
 ):
     noise = graph.node("RandomNoise", noise_seed=seed)
-    guider = graph.node(
-        "BasicGuider",
-        model=_component(bundle, "model"),
-        conditioning=conditioning,
-    )
+    guider = graph.node("BasicGuider", model=model, conditioning=conditioning)
     sampler = graph.node("KSamplerSelect", sampler_name="res_multistep")
     sigmas = graph.node(
         "BasicScheduler",
-        model=_component(bundle, "model"),
+        model=model,
         scheduler=scheduler,
-        steps=STEPS,
+        steps=20,
         denoise=1.0,
     )
     sampled = graph.node(
@@ -284,20 +195,118 @@ def _build_sampling_tail(
         sigmas=sigmas.out(0),
         latent_image=latent,
     )
-    frames = graph.node(
-        "VAEDecode",
-        samples=sampled.out(0),
-        vae=_component(bundle, "video_vae"),
-    )
-    audio = graph.node(
+    decoded_images = graph.node("VAEDecode", samples=sampled.out(0), vae=video_vae)
+    decoded_audio = graph.node(
         "VAEDecodeAudio",
         samples=sampled.out(0),
-        vae=_component(bundle, "audio_vae"),
+        vae=audio_vae,
     )
     video = graph.node(
         "CreateVideo",
-        images=frames.out(0),
-        audio=audio.out(0),
-        fps=float(FPS),
+        images=decoded_images.out(0),
+        audio=decoded_audio.out(0),
+        fps=float(BASE_FPS),
     )
-    return _finish(graph, video.out(0), frames.out(0), audio.out(0))
+    return video.out(0), decoded_images.out(0), decoded_audio.out(0)
+
+
+def build_h3_fl2va_graph(
+    *,
+    bundle: dict[str, Any],
+    prompt: str,
+    first_frame: Any | None,
+    last_frame: Any | None,
+    duration_seconds: float,
+    width: int,
+    height: int,
+    seed: int,
+):
+    require_h3_bundle(bundle, "FL2VA")
+    frame_count = validate_h3_common(
+        prompt=prompt,
+        duration_seconds=duration_seconds,
+        width=width,
+        height=height,
+        seed=seed,
+    )
+    graph = _builder()
+    conditioning = graph.node(
+        "MiniMaxH3ImageToVideo",
+        clip=bundle["text_encoder"],
+        vae=bundle["video_vae"],
+        prompt=prompt,
+        width=width,
+        height=height,
+        length=frame_count,
+        first_frame=first_frame,
+        last_frame=last_frame,
+    )
+    video, images, audio = _sampling_tail(
+        graph,
+        model=bundle["model"],
+        conditioning=conditioning.out(0),
+        latent=conditioning.out(1),
+        video_vae=bundle["video_vae"],
+        audio_vae=bundle["audio_vae"],
+        seed=seed,
+        scheduler="simple",
+    )
+    return _finish(graph, video, images, audio)
+
+
+def build_h3_ref2va_graph(
+    *,
+    bundle: dict[str, Any],
+    prompt: str,
+    ref_images: dict[str, Any],
+    ref_videos: dict[str, Any],
+    ref_video_audios: dict[str, Any],
+    ref_audios: dict[str, Any],
+    duration_seconds: float,
+    width: int,
+    height: int,
+    seed: int,
+    ref_image_size: str,
+    scheduler: str,
+):
+    require_h3_bundle(bundle, "Ref2VA")
+    frame_count = validate_h3_common(
+        prompt=prompt,
+        duration_seconds=duration_seconds,
+        width=width,
+        height=height,
+        seed=seed,
+    )
+    validate_reference_inputs(
+        ref_images=ref_images,
+        ref_videos=ref_videos,
+        ref_video_audios=ref_video_audios,
+        ref_audios=ref_audios,
+    )
+    graph = _builder()
+    conditioning = graph.node(
+        "MiniMaxH3ReferenceToVideo",
+        clip=bundle["text_encoder"],
+        vae=bundle["video_vae"],
+        audio_vae=bundle["audio_vae"],
+        prompt=prompt,
+        width=width,
+        height=height,
+        length=frame_count,
+        ref_image_size=ref_image_size,
+        ref_images=ref_images,
+        ref_videos=ref_videos,
+        ref_video_audios=ref_video_audios,
+        ref_audios=ref_audios,
+    )
+    video, images, audio = _sampling_tail(
+        graph,
+        model=bundle["model"],
+        conditioning=conditioning.out(0),
+        latent=conditioning.out(1),
+        video_vae=bundle["video_vae"],
+        audio_vae=bundle["audio_vae"],
+        seed=seed,
+        scheduler=scheduler,
+    )
+    return _finish(graph, video, images, audio)
